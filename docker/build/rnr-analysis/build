@@ -1,0 +1,5 @@
+#!/bin/bash
+
+set -Eeou pipefail
+
+docker build -t avail-research-rnr:0.0.1 -t avail-research-rnr:latest .

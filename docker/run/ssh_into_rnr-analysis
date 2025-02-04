@@ -1,0 +1,10 @@
+#!/bin/bash
+
+set -Eeou pipefail
+set -a
+
+source .env
+
+__DIRNAME__=$(dirname "$0")
+
+ssh -i "$__DIRNAME__/config/.ssh/id_ed25519" availien@$PYTHON_ANALYSIS_SSH_HOST -p $PYTHON_ANALYSIS_SSH_PORT

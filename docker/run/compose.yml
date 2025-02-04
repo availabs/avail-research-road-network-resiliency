@@ -1,0 +1,28 @@
+services:
+    rnr-analysis:
+      image: avail-research-rnr:latest
+      container_name: rnr-analysis
+      restart: 'no'
+      ports:
+        - ${PYTHON_ANALYSIS_SSH_PORT}:22
+      volumes:
+        - ${PWD}/config/authorized_keys:/home/availien/.ssh/authorized_keys
+        - ${PWD}/mount_dirs/shared_data:/shared_data
+        # .venv is platform specific, so container needs its own.
+        - ${PWD}/mount_dirs/rnr-analysis-venv:/home/availien/rnr-analysis/.venv
+        - ${PWD}/../../:/home/availien/rnr-analysis/
+      shm_size: 6g
+    rnr-db:
+      image: pgrouting/pgrouting:16-3.4-3.6.1
+      container_name: rnr-db
+      restart: 'no'
+      ports:
+        - ${PGPORT}:5432
+      volumes:
+        - ${PWD}/mount_dirs/pg_data:/var/lib/postgresql/data
+        - ${PWD}/mount_dirs/shared_data:/shared_data
+      environment:
+        - POSTGRES_USER=$PGUSER
+        - POSTGRES_PASSWORD=$PGPASSWORD
+        - POSTGRES_DB=$PGDATABASE
+      shm_size: 2g

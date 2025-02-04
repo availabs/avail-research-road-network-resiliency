@@ -1,0 +1,31 @@
+#!/bin/bash
+
+set -Eeou pipefail
+
+KEY_PATH=config/.ssh/id_ed25519
+SHARED_DATA_DIR=./mount_dirs/shared_data
+RNR_ANALYSIS_VENV=./mount_dirs/rnr-analysis-venv
+
+if [ ! -f $KEY_PATH ]; then
+  mkdir -p $(dirname $KEY_PATH)
+
+  ssh-keygen -t ed25519 -N '' -f "$KEY_PATH"
+
+  cat "$KEY_PATH".pub >> config/authorized_keys
+fi
+
+# The shared/data directory should have the same permissions as /tmp/
+#   SEE: https://unix.stackexchange.com/a/71625
+if [ ! -d $SHARED_DATA_DIR ]; then
+  mkdir -p $SHARED_DATA_DIR
+
+  chmod 1777 $SHARED_DATA_DIR
+fi
+
+# The shared/data directory should have the same permissions as /tmp/
+#   SEE: https://unix.stackexchange.com/a/71625
+if [ ! -d $RNR_ANALYSIS_VENV ]; then
+  mkdir -p $RNR_ANALYSIS_VENV
+
+  chmod 1777 $RNR_ANALYSIS_VENV
+fi

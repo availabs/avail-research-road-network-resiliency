@@ -1,0 +1,5 @@
+#!/bin/bash
+
+set -Eeou pipefail
+
+docker compose up --detach

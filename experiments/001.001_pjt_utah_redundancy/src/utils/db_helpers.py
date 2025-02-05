@@ -25,6 +25,10 @@ def load_detours_analysis_into_postgis(
                 )
             )
 
+        db_conn.exec_driver_sql(
+            format_with_schema('CREATE EXTENSION IF NOT EXISTS POSTGIS ;')
+        )
+
         if clean_schema:
             db_conn.exec_driver_sql(
                 format_with_schema('DROP SCHEMA IF EXISTS {postgres_schema} CASCADE ;')

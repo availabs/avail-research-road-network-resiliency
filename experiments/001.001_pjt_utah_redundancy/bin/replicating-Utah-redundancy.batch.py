@@ -54,7 +54,7 @@ async def main():
     glob_pattern = f'../data/{osm_file_prefix}*.osm.pbf'
 
     files = sorted(glob.glob(glob_pattern))
-    files = files[12:18]
+    # files = files[12:18]
 
     for file in files:
         queue.put_nowait(file)

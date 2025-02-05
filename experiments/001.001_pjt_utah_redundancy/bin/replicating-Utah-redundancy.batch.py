@@ -19,6 +19,8 @@ async def worker(name, queue):
         # Get a "work item" out of the queue.
         file = await queue.get()
 
+        print('worker:', name, '; file:', file)
+
         cmd = ['python', worker_path, '--filename', file]
 
         proc = await asyncio.create_subprocess_exec(

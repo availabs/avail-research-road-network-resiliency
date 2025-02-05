@@ -208,7 +208,7 @@ def enrich_osmnx_graph(g):
 
     # NOTE: add_edge_speeds crashes without the following work around
     for (u, v, d) in g.edges(data=True):
-        if not (isinstance(d['maxspeed'], str) or d['maxspeed'] is None):
+        if 'maxspeed' in d and isinstance(d['maxspeed'], list):
             d['maxspeed'] = flatten('maxspeed', d)
         
         # For some OSM areas there are no refs defined.
@@ -252,8 +252,19 @@ def enrich_osmnx_graph(g):
             to_omit_edge_full_name=road_name
         )
 
+    hwy_speeds = {
+        'motorway': 100,
+        'trunk': 100,
+        'primary': 60,
+        'secondary': 60,
+        'tertiary': 60,
+        'residential': 50,
+        'unclassified': 40,
+        'livingstreet': 35,
+        'service': 30,
+    }
     # https://osmnx.readthedocs.io/en/stable/user-reference.html#osmnx.routing.add_edge_speeds
-    ox.add_edge_speeds(g)
+    ox.add_edge_speeds(g, hwy_speeds=hwy_speeds)
 
     # https://osmnx.readthedocs.io/en/stable/user-reference.html#osmnx.routing.add_edge_travel_times
     ox.add_edge_travel_times(g)

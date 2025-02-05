@@ -41,10 +41,6 @@ postgres_env_path = os.path.join(
     '../config/.env'
 )
 
-print(postgres_env_path)
-
-print(osm_pbf)
-
 # Take the first part of the PBF file name that includes a string of at least 5 consecutive digits.
 # roadways_prefix_regex = re.compile(r'^vehicle-nonservice-roadways')
 geoid_regex = re.compile(r'[0-9]{5,}')
@@ -55,8 +51,6 @@ region_id = [
 ][0]
 
 region_geoid = re.search(geoid_regex, region_id).group(0)
-
-print(region_geoid)
 
 ## Config file paths
 out_dir = os.path.join(this_dir, '../redundancy_analysis_output', region_id)

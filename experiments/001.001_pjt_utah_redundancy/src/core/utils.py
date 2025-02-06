@@ -1,3 +1,8 @@
+import ast
+import os
+import pickle
+
+import osmnx as ox
 import pandas as pd
 import geopandas as gpd
 
@@ -63,3 +68,30 @@ def extract_detour_geodataframes_for_edge_id(
         base_path_edges_gdf=base_path_edges_gdf,
         detour_path_edges_gdf=detour_path_edges_gdf,
     )
+
+def restore_entities_from_output_dir(output_dir):
+    with open(os.path.join(output_dir, 'osmnx_graph.pkl'), 'rb') as pkl_file:
+        g = pickle.load(pkl_file)
+
+    edges_gdf = ox.convert.graph_to_gdfs(g, nodes=False)
+
+    detours_info_df = gpd.read_file(
+        filename=os.path.join(output_dir, 'redundancy-analysis.gpkg'),
+        layer='detours_info',
+        driver='GPKG',
+        engine='pyogrio'
+    )
+
+    detours_info_df = detours_info_df.set_index(['u', 'v', 'key'])
+
+    def parse_ids(s):
+        return ast.literal_eval(s) if s else None
+
+    detours_info_df['base_path_edge_ids'] = detours_info_df['base_path_edge_ids'].apply(parse_ids)
+    detours_info_df['detour_path_edge_ids'] = detours_info_df['detour_path_edge_ids'].apply(parse_ids)
+
+    return {
+        'g': g,
+        'edges_gdf': edges_gdf,
+        'detours_info_df': detours_info_df
+    }

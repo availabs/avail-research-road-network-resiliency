@@ -1,8 +1,15 @@
-from sqlalchemy import text as sql_text
+import ast
+import os
+import pickle
+
+import geopandas as gpd
+import pandas as pd
 import psycopg2.sql
 import psycopg2
+import osmnx as ox
+from sqlalchemy import text as sql_text
 
-from ..core.utils import create_base_paths_df, create_detour_paths_df
+from ..core.utils import create_base_paths_df, create_detour_paths_df, restore_entities_from_output_dir
 
 def load_detours_analysis_into_postgis(
     db_conn,
@@ -376,3 +383,21 @@ def load_detours_analysis_into_postgis(
             )
 
         raise e
+
+def load_analysis_dir_into_postgres(
+    db_conn,
+    postgres_schema,
+    output_dir,
+    clean_schema=False,
+    single_transaction=True
+):
+    entities = restore_entities_from_output_dir(output_dir)
+
+    return load_detours_analysis_into_postgis(
+        db_conn,
+        postgres_schema,
+        roadways_gdf=entities['edges_gdf'],
+        detours_info_df=entities['detours_info_df'],
+        clean_schema=clean_schema,
+        single_transaction=single_transaction,
+    )

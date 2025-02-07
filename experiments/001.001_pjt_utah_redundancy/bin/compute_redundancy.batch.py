@@ -1,11 +1,9 @@
 import os
 import re
-import glob
 import asyncio
 
-CONCURRENCY = 4
+DEFAULT_CONCURRENCY = 4
 
-# osm_file_prefix = 'vehicle-nonservice-roadways_'
 osm_file_prefix = 'vehicle-nonservice-roadways_county-subdivision-'
 
 this_dir = os.path.dirname(
@@ -47,21 +45,23 @@ async def worker(name, queue):
         # Notify the queue that the "work item" has been processed.
         queue.task_done()
 
-async def main():
+async def manager(filenames, concurrency=DEFAULT_CONCURRENCY):
     # Create a queue that we will use to store our "workload".
     queue = asyncio.Queue()
 
-    glob_pattern = f'../data/{osm_file_prefix}*.osm.pbf'
+    osm_pbf_re = re.compile(r'\.osm\.pbf$')
 
-    files = sorted(glob.glob(glob_pattern))
-    # files = files[12:18]
+    osm_pbf_files = sorted([
+        f for f in filenames
+        if re.search(osm_pbf_re, f)
+    ])
 
-    for file in files:
+    for file in osm_pbf_files:
         queue.put_nowait(file)
 
     # Create three worker tasks to process the queue concurrently.
     tasks = []
-    for i in range(CONCURRENCY):
+    for i in range(concurrency):
         task = asyncio.create_task(worker(f'worker-{i}', queue))
         tasks.append(task)
 
@@ -75,4 +75,38 @@ async def main():
     # Wait until all worker tasks are cancelled.
     await asyncio.gather(*tasks, return_exceptions=True)
 
-asyncio.run(main())
+def main(filenames, concurrency=DEFAULT_CONCURRENCY):
+    asyncio.run(
+        manager(filenames=filenames, concurrency=concurrency)
+    )
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description='Compute road redundancy for the provided OSM PBF files.'
+    )
+
+    parser.add_argument(
+        '-f',
+        '--filenames',
+        nargs='+',
+        help='Path to OSM PBF files to process.',
+        required=True
+    )
+
+    parser.add_argument(
+        '-c',
+        '--concurrency',
+        type=int,
+        default=DEFAULT_CONCURRENCY,
+        help='Concurrency level.',
+    )
+
+    args = parser.parse_args()
+
+    main(
+        filenames=args.filenames,
+        concurrency=args.concurrency
+    )

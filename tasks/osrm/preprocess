@@ -1,0 +1,25 @@
+#!/bin/bash
+
+set -eou pipefail
+
+OSM_VERSION=nonservice-roadways-buffer-50mi-state-36_us-250101
+# OSM_VERSION=nonservice-roadways-buffer-10mi-county-36001_nonservice-roadways-buffer-50mi-state-36_us-250101
+
+docker \
+  run \
+  -t \
+  -v "${PWD}/data:/data" \
+  ghcr.io/project-osrm/osrm-backend \
+  osrm-extract \
+  -p /opt/car.lua \
+  /data/$OSM_VERSION.osm.pbf \
+  || echo "osrm-extract failed"
+
+docker \
+  run \
+  -t \
+  -v "${PWD}/data:/data" \
+  ghcr.io/project-osrm/osrm-backend \
+  osrm-contract \
+  /data/$OSM_VERSION.osm.pbf \
+  || echo "osrm-extract failed"

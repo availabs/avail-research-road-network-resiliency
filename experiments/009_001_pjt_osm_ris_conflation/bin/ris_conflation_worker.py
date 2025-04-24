@@ -1,17 +1,11 @@
 import argparse
 import os
-import sys
+from os import PathLike
 from typing import Any, Dict
 
 import pandas as pd
 import pyproj
 from prefect import flow, get_run_logger, task
-
-from common.nysdot.structures.nysdot_bridges import get_clipped_nysdot_bridges_data
-from common.nysdot.structures.nysdot_large_culverts import (
-    get_clipped_large_culvert_data,
-)
-from common.osm.enrich import create_enriched_osmnx_graph_for_region
 
 # From the experiment's src dir
 from src.ris_processing_pipeline import (
@@ -22,6 +16,12 @@ from src.ris_processing_pipeline import (
     select_best_ris_for_osmnx_edge,
 )
 
+from common.nysdot.structures.nysdot_bridges import get_clipped_nysdot_bridges_data
+from common.nysdot.structures.nysdot_large_culverts import (
+    get_clipped_large_culvert_data,
+)
+from common.osm.enrich import create_enriched_osmnx_graph_for_region
+
 conflation_output_dir = os.path.join(
     os.path.dirname(__file__), "../data/processed/conflation/"
 )
@@ -29,7 +29,8 @@ conflation_output_dir = os.path.join(
 
 @task
 def create_enriched_osmnx_graph_task(
-    osm_pbf: str, include_base_osm_data: bool = True
+    osm_pbf: PathLike,  #
+    include_base_osm_data: bool = True,
 ) -> Dict[str, Any]:
     """Task to create or load the enriched OSMnx graph."""
     # This task would ideally include the caching logic from the original notebook

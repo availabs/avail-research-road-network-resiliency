@@ -11,13 +11,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   default-jre \
   gcc \
   gdal-bin \
+  git \
   openssh-server \
   libpq-dev \
+  postgresql-client \
   python3-dev \
   sqlite3 \
   sudo \
   time \
   tmux \
+  wget \
   zip
 
 # Utilities: dev-ops ergonomics when ssh'ing into the containers.

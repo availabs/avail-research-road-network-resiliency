@@ -26,3 +26,17 @@ services:
         - POSTGRES_PASSWORD=$PGPASSWORD
         - POSTGRES_DB=$PGDATABASE
       shm_size: 2g
+    rnr-osrm:
+      image: ghcr.io/project-osrm/osrm-backend
+      container_name: rnr-osrm
+      restart: 'no'
+      ports:
+        - ${OSRM_PORT}:5000
+      volumes:
+        - ${PWD}/mount_dirs/osrm:/data/
+      entrypoint:
+        - 'osrm-routed'
+        - '--max-matching-size'
+        - '100000'
+        - "/data/${OSRM_OSM_VERSION}.osrm"
+      shm_size: 2g

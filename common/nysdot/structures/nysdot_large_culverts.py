@@ -5,10 +5,6 @@ from typing import Any, Dict, Optional, Union
 import geopandas as gpd
 import pyogrio
 
-# --- Logger Setup ---
-# Configure logging in the calling script/orchestrator (e.g., Prefect flow, worker script)
-# Example configuration:
-# logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 

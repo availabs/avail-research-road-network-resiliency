@@ -20,6 +20,9 @@ this_dir = os.path.dirname(os.path.abspath(__file__))
 
 OSMOSIS = os.path.join(this_dir, "../../lib/osmosis/latest/bin/osmosis")
 
+DEFAULT_OSM_EXTRACT_BUFFER_DIST_MI = 10
+DEFAULT_OSM_EXTRACTS_DIR = os.path.join(__file__, "../../data/processed/osm")
+
 
 def get_osm_version_from_pbf_filename(osm_pbf: PathLike):
     osm_version_re = re.compile(r"[^0-9](?P<osm_version>\d{6})\.osm\.pbf$")
@@ -136,10 +139,11 @@ def output_osmosis_filter_poly(
 
 
 def create_osm_region_road_network_extract_pbf(
-    osm_pbf: os.PathLike,  #
+    base_osm_pbf: os.PathLike,  #
     geoid: str,
-    buffer_dist_mi: Optional[int] = 10,
-    output_dir: Optional[os.PathLike] = os.getcwd(),
+    buffer_dist_mi: Optional[int] = DEFAULT_OSM_EXTRACT_BUFFER_DIST_MI,
+    output_dir: Optional[os.PathLike] = DEFAULT_OSM_EXTRACTS_DIR,
+    clean: bool = False,
 ) -> str:
     """
     Creates an OSM road network extract (PBF file) for a specified region.
@@ -179,9 +183,16 @@ def create_osm_region_road_network_extract_pbf(
     poly_filename = os.path.join(output_dir, f"{region_name}.poly")
 
     output_file_basename = (
-        f"nonservice-roadways-{region_name}_{os.path.basename(osm_pbf)}"
+        f"nonservice-roadways-{region_name}_{os.path.basename(base_osm_pbf)}"
     )
+
     output_file = os.path.join(output_dir, output_file_basename)
+
+    if os.path.exists(output_file):
+        if clean:
+            os.remove(output_file)
+        else:
+            return output_file
 
     output_osmosis_filter_poly(
         region_gdf=buffered_region_gdf,  #
@@ -212,7 +223,7 @@ def create_osm_region_road_network_extract_pbf(
     osmium_extract_cmd = [
         OSMOSIS,
         "--read-pbf-fast",
-        osm_pbf,
+        base_osm_pbf,
         "--sort",
         "type=TypeThenId",
         "--bounding-polygon",

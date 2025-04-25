@@ -11,7 +11,7 @@ to the calling code.
 import logging
 import os
 from enum import Enum
-from typing import Any, Callable, Dict, List, Set, Tuple, Union
+from typing import Any, Dict, List, Set, Tuple, Union
 
 import networkx as nx
 
@@ -129,46 +129,6 @@ def get_pickle_file_path(
     return os.path.join(metrics_pickle_dir, filename)
 
 
-def _compute_networkx_metric_core(
-    g: nx.MultiDiGraph, nx_function: Callable, **nx_kwargs: Any
-) -> Any:
-    """
-    Core computation logic for a generic NetworkX metric function.
-
-    This helper function directly calls the provided NetworkX function
-    with the graph and any additional keyword arguments.
-
-    Args:
-        g (nx.MultiDiGraph): The graph on which to compute the metric.
-        nx_function (Callable): The specific NetworkX function to call
-            (e.g., `nx.betweenness_centrality`, `nx.algorithms.community.modularity`).
-        **nx_kwargs (Any): Additional keyword arguments required by the
-            `nx_function`.
-
-    Returns:
-        Any: The result returned by the `nx_function`. The type depends on the
-             specific metric being computed (e.g., dict, float, list of sets).
-
-    Raises:
-        Exception: Propagates any exception raised by the underlying `nx_function`
-                   during computation (e.g., `NetworkXError`, `ValueError`).
-    """
-    logging.info(
-        f"Computing metric using function: {nx_function.__name__} with args: {nx_kwargs}"
-    )
-    try:
-        metric_result = nx_function(g, **nx_kwargs)
-        logging.info(f"Finished computing metric: {nx_function.__name__}")
-        return metric_result
-    except Exception as e:
-        logging.error(
-            f"Error computing metric {nx_function.__name__}: {e}",
-            exc_info=True,
-        )
-        # Re-raise the exception to be handled by the caller (e.g., Prefect task)
-        raise
-
-
 # --------------------------------------------------------------------------- #
 # Specific Metric Computation Functions                                       #
 # --------------------------------------------------------------------------- #
@@ -201,8 +161,9 @@ def compute_node_betweenness_centrality(
     Raises:
         Exception: Propagates exceptions from the underlying NetworkX function.
     """
-    return _compute_networkx_metric_core(
-        g=g, nx_function=nx.betweenness_centrality, weight="travel_time"
+    return nx.betweenness_centrality(
+        G=g,  #
+        weight="travel_time",
     )
 
 
@@ -213,10 +174,9 @@ def compute_closeness_centrality(g: nx.MultiDiGraph) -> Dict[Any, float]:
     Closeness centrality of a node `u` is the reciprocal of the sum of the shortest
     path distances from `u` to all `n-1` other nodes. Since the sum of distances
     depends on the number of nodes in the connected part of the graph, the closeness
-    centrality is normalized by the number of nodes reachable from `u`. It uses
-    standard shortest paths (no specific weighting beyond edge existence by default
-    in nx.closeness_centrality unless 'distance' attribute is specified, which
-    we are not doing here explicitly, relying on NetworkX defaults).
+    centrality is normalized by the number of nodes reachable from `u`. It uses the
+    'travel_time' edge attribute as the distance for shortest path calculations if available.
+
 
     Args:
         g (nx.MultiDiGraph): The graph for which to compute centrality.
@@ -228,7 +188,10 @@ def compute_closeness_centrality(g: nx.MultiDiGraph) -> Dict[Any, float]:
     Raises:
         Exception: Propagates exceptions from the underlying NetworkX function.
     """
-    return _compute_networkx_metric_core(g=g, nx_function=nx.closeness_centrality)
+    return nx.closeness_centrality(
+        G=g,  #
+        distance="travel_time",
+    )
 
 
 def compute_edge_betweenness_centrality(
@@ -258,8 +221,9 @@ def compute_edge_betweenness_centrality(
     Raises:
         Exception: Propagates exceptions from the underlying NetworkX function.
     """
-    return _compute_networkx_metric_core(
-        g=g, nx_function=nx.edge_betweenness_centrality, weight="travel_time"
+    return nx.edge_betweenness_centrality(
+        G=g,  #
+        weight="travel_time",
     )
 
 

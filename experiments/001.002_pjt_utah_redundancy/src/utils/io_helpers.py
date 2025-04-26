@@ -15,7 +15,7 @@ def create_detours_gpkg(
     base_paths_df: pd.DataFrame | None = None,
     detour_paths_df: pd.DataFrame | None = None,
     mkdir: bool = True,
-):
+) -> PathLike:
     if not filename:
         raise ValueError("filename is required")
 
@@ -70,6 +70,8 @@ def create_detours_gpkg(
         driver="GPKG",
         engine="pyogrio",
     )
+
+    return filename
 
 
 def _get_paths_gpd_from_gpkg(filename, path_type):

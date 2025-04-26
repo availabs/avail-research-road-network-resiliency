@@ -79,7 +79,7 @@ class AnalysisPaths:
             output_dir=output_dir,
             detour_maps_dir=output_dir / "detour_maps",
             results_gpkg=(
-                output_dir / f"e001_002_utah_redundancy_analysis.{region_name}.gpkg",
+                output_dir / f"e001_002_utah_redundancy_analysis.{region_name}.gpkg"
             ),
         )
 
@@ -176,7 +176,7 @@ def export_results_task(
         raise ValueError("Missing required data for export")
 
     create_detours_gpkg(
-        filename=str(paths.results_gpkg),
+        filename=paths.results_gpkg,
         roadways_gdf=roadways_gdf,
         detours_info_df=detours_df,
     )
@@ -186,7 +186,9 @@ def export_results_task(
 
 
 @flow
-def redundancy_analysis_flow(osm_pbf: str) -> None:
+def redundancy_analysis_flow(
+    osm_pbf: str,  #
+) -> None:
     """
     Runs the complete redundancy analysis workflow.
 
@@ -219,7 +221,7 @@ def redundancy_analysis_flow(osm_pbf: str) -> None:
         edge_ids=edge_ids,
     )
 
-    export_results_task(
+    export_gpkg = export_results_task(
         paths=paths,
         roadways_gdf=roadways_gdf,
         detours_df=detours_df,
@@ -227,6 +229,8 @@ def redundancy_analysis_flow(osm_pbf: str) -> None:
 
     logger.info("Analysis completed successfully")
     logger.info("Finished redundancy_analysis_flow")
+
+    return export_gpkg
 
 
 # =============================================================================
@@ -274,7 +278,7 @@ def main() -> int:
         logger.setLevel(logging.DEBUG)
         logger.debug("Verbose logging enabled")
 
-    redundancy_analysis_flow(osm_pbf=args.osm_pbf)  # Run the Prefect flow
+    return redundancy_analysis_flow(osm_pbf=args.osm_pbf)  # Run the Prefect flow
 
 
 if __name__ == "__main__":

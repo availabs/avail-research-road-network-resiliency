@@ -20,6 +20,7 @@ from common.nysdot.structures.nysdot_large_culverts import (
     get_clipped_large_culvert_data,
 )
 from tasks.osm import enrich_osm_task
+from tasks.osrm import start_osrm_container_task
 
 conflation_output_dir = os.path.join(
     os.path.dirname(__file__), "../data/processed/conflation/"
@@ -254,7 +255,6 @@ def perform_osmnx_conflation_flow(
     ris_path: str,  # This will be used for loading RIS and as ris_gpkg_path
     nysdot_bridges_path: str,
     nysdot_large_culverts_path: str,
-    osrm_host: str,
 ):
     """
     Prefect flow that orchestrates the OSMnx and RIS conflation process.
@@ -267,85 +267,95 @@ def perform_osmnx_conflation_flow(
         osrm_host: OSRM server host address.
         output_dir: Directory to save the output GeoPackage.
     """
-    # [1] Create or load enriched OSMnx graph
-    enriched_osm = enrich_osm_task(osm_pbf=osm_pbf)
+    osrm_cleanup = None
+    try:
+        # [1] Create or load enriched OSMnx graph
+        enriched_osm = enrich_osm_task(osm_pbf=osm_pbf)
 
-    G = enriched_osm["G"]
-    g = enriched_osm["g"]
-    geoid = enriched_osm["geoid"]
-    region_name = enriched_osm["region_name"]
-    roads_gdf = enriched_osm["edges_gdf"]
-    buffered_region_gdf = enriched_osm["buffered_region_gdf"]
+        G = enriched_osm["G"]
+        g = enriched_osm["g"]
+        geoid = enriched_osm["geoid"]
+        region_name = enriched_osm["region_name"]
+        roads_gdf = enriched_osm["edges_gdf"]
+        buffered_region_gdf = enriched_osm["buffered_region_gdf"]
 
-    # [2] Initialize pyproj Geod
-    geod = initialize_geod_task()
+        # [2] Initialize pyproj Geod
+        geod = initialize_geod_task()
 
-    # [3] Load RIS data
-    ris_gdf = load_ris_data_task(
-        ris_source_path=ris_path,
-        county_geoid=geoid,
-    )
+        # [3] Load RIS data
+        ris_gdf = load_ris_data_task(
+            ris_source_path=ris_path,
+            county_geoid=geoid,
+        )
 
-    # [4] Perform OSRM matching
-    osrm_match_results_df = perform_osrm_matching_task(
-        ris_gdf=ris_gdf,
-        osm_graph=G,
-        osrm_host=osrm_host,
-        geod=geod,
-    )
+        osrm_host, osrm_cleanup = start_osrm_container_task()
 
-    # [5] Convert OSRM matches to OSMnx edges
-    osmnx_edge_matches_df = osrm_matches_to_osmnx_edges_task(
-        osrm_match_results_df=osrm_match_results_df,  #
-        osmnx_graph_simplified=g,
-    )
+        # [4] Perform OSRM matching
+        osrm_match_results_df = perform_osrm_matching_task(
+            ris_gdf=ris_gdf,
+            osm_graph=G,
+            osrm_host=osrm_host,
+            geod=geod,
+        )
 
-    # [6] Select best RIS matches for OSMnx edges
-    selected_osmnx_matches_df = select_best_ris_for_osmnx_edge_task(
-        osmnx_edge_matches_df=osmnx_edge_matches_df,  #
-        osmnx_graph_simplified=g,
-    )
+        # [5] Convert OSRM matches to OSMnx edges
+        osmnx_edge_matches_df = osrm_matches_to_osmnx_edges_task(
+            osrm_match_results_df=osrm_match_results_df,  #
+            osmnx_graph_simplified=g,
+        )
 
-    # [7] Get clipped NYSDOT bridges data
-    nysdot_bridges_df = get_clipped_nysdot_bridges_data_task(
-        nysdot_bridges_source=nysdot_bridges_path,
-        buffered_region_gdf=buffered_region_gdf,
-    )  # filter_out_rail_bridges defaults to True
+        # [6] Select best RIS matches for OSMnx edges
+        selected_osmnx_matches_df = select_best_ris_for_osmnx_edge_task(
+            osmnx_edge_matches_df=osmnx_edge_matches_df,  #
+            osmnx_graph_simplified=g,
+        )
 
-    # [8] Get clipped NYSDOT large culverts data
-    nysdot_large_culverts_df = get_clipped_nysdot_large_culverts_data_task(
-        gis_source=nysdot_large_culverts_path,
-        buffered_region_gdf=buffered_region_gdf,
-    )
+        # [7] Get clipped NYSDOT bridges data
+        nysdot_bridges_df = get_clipped_nysdot_bridges_data_task(
+            nysdot_bridges_source=nysdot_bridges_path,
+            buffered_region_gdf=buffered_region_gdf,
+        )  # filter_out_rail_bridges defaults to True
 
-    # [9] Enrich with RIS attributes
-    enriched_with_ris_df = enrich_with_ris_attributes_task(
-        selected_osmnx_matches_df=selected_osmnx_matches_df,
-        nysdot_bridges_df=nysdot_bridges_df,
-        nysdot_large_culverts_df=nysdot_large_culverts_df,
-        ris_gpkg_path=ris_path,  # Use ris_path as ris_gpkg_path
-    )
+        # [8] Get clipped NYSDOT large culverts data
+        nysdot_large_culverts_df = get_clipped_nysdot_large_culverts_data_task(
+            gis_source=nysdot_large_culverts_path,
+            buffered_region_gdf=buffered_region_gdf,
+        )
 
-    # [10] Join roads geometry with final conflation results
-    osrm_conflation_gdf = join_roads_geometry_task(
-        roads_gdf=roads_gdf,
-        enriched_with_ris_df=enriched_with_ris_df,
-    )
+        # [9] Enrich with RIS attributes
+        enriched_with_ris_df = enrich_with_ris_attributes_task(
+            selected_osmnx_matches_df=selected_osmnx_matches_df,
+            nysdot_bridges_df=nysdot_bridges_df,
+            nysdot_large_culverts_df=nysdot_large_culverts_df,
+            ris_gpkg_path=ris_path,  # Use ris_path as ris_gpkg_path
+        )
 
-    # [11] Save results to GeoPackage and print statistics
-    saved_output_path = save_conflation_output_task(
-        osrm_conflation_gdf=osrm_conflation_gdf,
-        region_name=region_name,
-    )
+        # [10] Join roads geometry with final conflation results
+        osrm_conflation_gdf = join_roads_geometry_task(
+            roads_gdf=roads_gdf,
+            enriched_with_ris_df=enriched_with_ris_df,
+        )
 
-    # [11] Save results to GeoPackage and print statistics
-    save_conflation_qa_task(
-        osrm_conflation_gdf=osrm_conflation_gdf,
-        ris_gdf=ris_gdf,
-        enriched_osm=enriched_osm,
-    )
+        # [11] Save results to GeoPackage and print statistics
+        saved_output_path = save_conflation_output_task(
+            osrm_conflation_gdf=osrm_conflation_gdf,
+            region_name=region_name,
+        )
 
-    return saved_output_path  # Return the path to the final output file
+        # [11] Save results to GeoPackage and print statistics
+        save_conflation_qa_task(
+            osrm_conflation_gdf=osrm_conflation_gdf,
+            ris_gdf=ris_gdf,
+            enriched_osm=enriched_osm,
+        )
+
+        return saved_output_path  # Return the path to the final output file
+    finally:
+        try:
+            if osrm_cleanup:
+                osrm_cleanup()
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":
@@ -372,11 +382,6 @@ if __name__ == "__main__":
         required=True,
         help="Path to the NYSDOT large culverts shapefile",
     )
-    parser.add_argument(
-        "--osrm-host",
-        required=True,
-        help="OSRM server host address (e.g., http://localhost:5001)",
-    )
 
     args = parser.parse_args()
 
@@ -386,7 +391,6 @@ if __name__ == "__main__":
         ris_path=args.ris_path,
         nysdot_bridges_path=args.nysdot_bridges_path,
         nysdot_large_culverts_path=args.nysdot_large_culverts_path,
-        osrm_host=args.osrm_host,
     )
 
     print(f"\nConflation flow finished. Output saved to: {final_output_gpkg_path}")

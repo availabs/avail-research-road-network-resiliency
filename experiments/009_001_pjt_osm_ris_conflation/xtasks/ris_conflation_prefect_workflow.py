@@ -1,6 +1,5 @@
 import argparse
 import os
-from os import PathLike
 from typing import Any, Dict
 
 import pandas as pd
@@ -20,28 +19,11 @@ from common.nysdot.structures.nysdot_bridges import get_clipped_nysdot_bridges_d
 from common.nysdot.structures.nysdot_large_culverts import (
     get_clipped_large_culvert_data,
 )
-from common.osm.enrich import create_enriched_osmnx_graph_for_region
+from tasks.osm import enrich_osm_task
 
 conflation_output_dir = os.path.join(
     os.path.dirname(__file__), "../data/processed/conflation/"
 )
-
-
-@task
-def create_enriched_osmnx_graph_task(
-    osm_pbf: PathLike,  #
-    include_base_osm_data: bool = True,
-) -> Dict[str, Any]:
-    """Task to create or load the enriched OSMnx graph."""
-    # This task would ideally include the caching logic from the original notebook
-    # For simplicity in this refactoring, we'll just call the function.
-    # In a real Prefect flow, you might use Prefect Caching or check for the file existence within the task.
-    # For now, assuming create_enriched_osmnx_graph_for_region handles loading/creation.
-    print(f"Creating/loading enriched OSMnx graph from {osm_pbf}")
-    return create_enriched_osmnx_graph_for_region(
-        osm_pbf=osm_pbf,
-        include_base_osm_data=include_base_osm_data,
-    )
 
 
 @task
@@ -286,7 +268,7 @@ def perform_osmnx_conflation_flow(
         output_dir: Directory to save the output GeoPackage.
     """
     # [1] Create or load enriched OSMnx graph
-    enriched_osm = create_enriched_osmnx_graph_task(osm_pbf=osm_pbf)
+    enriched_osm = enrich_osm_task(osm_pbf=osm_pbf)
 
     G = enriched_osm["G"]
     g = enriched_osm["g"]
@@ -314,12 +296,14 @@ def perform_osmnx_conflation_flow(
 
     # [5] Convert OSRM matches to OSMnx edges
     osmnx_edge_matches_df = osrm_matches_to_osmnx_edges_task(
-        osrm_match_results_df=osrm_match_results_df, osmnx_graph_simplified=g
+        osrm_match_results_df=osrm_match_results_df,  #
+        osmnx_graph_simplified=g,
     )
 
     # [6] Select best RIS matches for OSMnx edges
     selected_osmnx_matches_df = select_best_ris_for_osmnx_edge_task(
-        osmnx_edge_matches_df=osmnx_edge_matches_df, osmnx_graph_simplified=g
+        osmnx_edge_matches_df=osmnx_edge_matches_df,  #
+        osmnx_graph_simplified=g,
     )
 
     # [7] Get clipped NYSDOT bridges data

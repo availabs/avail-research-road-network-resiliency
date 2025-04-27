@@ -288,7 +288,7 @@ def perform_osmnx_conflation_flow(
             county_geoid=geoid,
         )
 
-        osrm_host, osrm_cleanup = start_osrm_container_task()
+        osrm_host, osrm_cleanup = start_osrm_container_task(osm_pbf=osm_pbf)
 
         # [4] Perform OSRM matching
         osrm_match_results_df = perform_osrm_matching_task(

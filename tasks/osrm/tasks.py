@@ -1,5 +1,6 @@
 import os
 import time
+from os import PathLike
 from typing import Callable, Tuple
 
 from prefect import get_run_logger, task
@@ -16,7 +17,7 @@ OSRM_DATA_DIR = os.path.abspath("../../data/processed/osrm")
 
 @task(name="Create OSRM Container")
 def start_osrm_container_task(
-    osm_version: str = DEFAULT_OSM_VERSION,
+    osm_pbf: PathLike,  #
 ) -> Tuple[str, Callable[[], None]]:
     """
     Starts an OSRM Docker container with dynamic port allocation and returns
@@ -29,6 +30,16 @@ def start_osrm_container_task(
     container: Container = (
         None  # Initialize container to None to handle errors before creation
     )
+
+    osm_pbf_basename = os.path.basename(osm_pbf)
+
+    # Verify that the osm_pbf is or was derived from the DEFAULT_OSM_VERSION
+    if DEFAULT_OSM_VERSION not in osm_pbf_basename:
+        raise ValueError(
+            f"OSM PBF version does not match OSRM OSM version: {osm_pbf_basename} vs {DEFAULT_OSM_VERSION}"
+        )
+
+    osm_version = DEFAULT_OSM_VERSION
 
     osrm_mount_dir = os.path.join(OSRM_DATA_DIR, osm_version)
 
@@ -46,7 +57,8 @@ def start_osrm_container_task(
 
     try:
         logger.info(
-            f"Starting OSRM container using image ghcr.io/project-osrm/osrm-backend with data version: {osm_version}"
+            "Starting OSRM container using image ghcr.io/project-osrm/osrm-backend "
+            f"with data version: {osm_version}"
         )
         # Start a container with dynamic port allocation
         container = client.containers.run(

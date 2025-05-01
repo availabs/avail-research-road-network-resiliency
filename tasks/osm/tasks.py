@@ -1,7 +1,6 @@
 import logging
 import os
 from os import PathLike
-from pathlib import Path
 from typing import Any, Dict, Optional
 
 from prefect import get_run_logger, task
@@ -15,11 +14,11 @@ from common.osm.extract import (
 
 
 @task(name="Create OSM PBF Extract for Region")
-def create_osm_region_road_network_extract_task(
-    base_osm_pbf: os.PathLike,  #
+def extract_osm_region_road_network_task(
+    base_osm_pbf: PathLike,  #
     geoid: str,
     buffer_dist_mi: Optional[int] = DEFAULT_OSM_EXTRACT_BUFFER_DIST_MI,
-    output_dir: Optional[os.PathLike] = DEFAULT_OSM_EXTRACTS_DIR,
+    output_dir: Optional[PathLike] = DEFAULT_OSM_EXTRACTS_DIR,
     clean: bool = False,
 ) -> Dict[str, Any]:
     """

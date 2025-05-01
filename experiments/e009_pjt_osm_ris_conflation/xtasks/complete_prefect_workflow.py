@@ -1,23 +1,28 @@
 import argparse
+import logging
 import os
-from typing import Any, Dict
+import shutil
+import stat
+from pathlib import Path
+from typing import Any
 
+import geopandas as gpd
 import pandas as pd
 import pyproj
 from prefect import flow, get_run_logger, task
 
+from common.nysdot.structures.nysdot_bridges import get_clipped_nysdot_bridges_data
+from common.nysdot.structures.nysdot_large_culverts import (
+    get_clipped_large_culvert_data,
+)
+
 # From the experiment's src dir
-from src.ris_processing_pipeline import (
+from experiments.e009_pjt_osm_ris_conflation.src.ris_processing_pipeline import (
     enrich_with_ris_attributes,
     load_ris_data,
     osrm_matches_to_osmnx_edges,
     perform_osrm_matching,
     select_best_ris_for_osmnx_edge,
-)
-
-from common.nysdot.structures.nysdot_bridges import get_clipped_nysdot_bridges_data
-from common.nysdot.structures.nysdot_large_culverts import (
-    get_clipped_large_culvert_data,
 )
 from tasks.osm import enrich_osm_task
 from tasks.osrm import start_osrm_container_task
@@ -25,6 +30,9 @@ from tasks.osrm import start_osrm_container_task
 conflation_output_dir = os.path.join(
     os.path.dirname(__file__), "../data/processed/conflation/"
 )
+
+experiment_root = Path(__file__).parent.parent.resolve()
+experiment_data_dir = experiment_root / "data"
 
 
 @task
@@ -148,53 +156,47 @@ def join_roads_geometry_task(
 @task
 def save_conflation_output_task(
     osrm_conflation_gdf: pd.DataFrame,
-    region_name: str,
+    output_gpkg: Path,
 ):
     """Task to save the conflation results to a GeoPackage and log statistics."""
     logger = get_run_logger()  # Get logger instance
 
-    output_gpkg_path = os.path.join(
-        conflation_output_dir, region_name, f"ris-conflation.{region_name}.gpkg"
-    )
-
     # Remove existing file if it exists
-    if os.path.exists(output_gpkg_path):
-        os.remove(output_gpkg_path)
+    if output_gpkg.exists():
+        os.remove(output_gpkg)
     else:
-        os.makedirs(os.path.dirname(output_gpkg_path), exist_ok=True)
+        output_gpkg.parent.mkdir(parents=True, exist_ok=True)
 
     # Save layers to GeoPackage
     try:
         osrm_conflation_gdf.to_file(
-            filename=output_gpkg_path,  #
+            filename=output_gpkg,  #
             layer="osm_edges_with_ris_meta",
             driver="GPKG",
         )
         logger.info("Saved 'osm_edges_with_ris_meta' layer.")
 
+        read_only_perms = stat.S_IREAD | stat.S_IRGRP | stat.S_IROTH
+        os.chmod(output_gpkg, read_only_perms)
+        logger.info(f"Task: Set file permissions to read-only for {output_gpkg}")
+
     except Exception as e:
-        logger.error(f"Error saving GeoPackage layers to {output_gpkg_path}: {e}")
+        logger.error(f"Error saving GeoPackage layers to {output_gpkg}: {e}")
         # Depending on the severity, you might raise a more specific exception
         raise  # Re-raise the exception to fail the task
 
-    return output_gpkg_path  # Return the path to the saved file
+    return output_gpkg  # Return the path to the saved file
 
 
 @task
 def save_conflation_qa_task(
+    roads_gdf: gpd.GeoDataFrame,
+    ris_gdf: gpd.GeoDataFrame,
     osrm_conflation_gdf: pd.DataFrame,
-    ris_gdf: pd.DataFrame,
-    enriched_osm: Dict[str, Any],
+    qa_output_gpkg: Path,
 ):
     """Task to save the conflation results to a GeoPackage and log statistics."""
     logger = get_run_logger()  # Get logger instance
-
-    region_name = enriched_osm["region_name"]
-    roads_gdf = enriched_osm["edges_gdf"]  # Use .get() for safer access
-
-    output_gpkg_path = os.path.join(
-        conflation_output_dir, region_name, f"qa-ris-conflation.{region_name}.gpkg"
-    )
 
     matched_route_ids = set(osrm_conflation_gdf["ris_route_id"])
 
@@ -208,6 +210,7 @@ def save_conflation_qa_task(
     logger.info("--- Conflation Statistics ---")
     logger.info(f"Total RIS Routes: {total_ris_routes_ids}")
     logger.info(f"Matched RIS Routes: {matched_ris_routes_ids}")
+
     # Avoid division by zero
     matching_rate = (
         matched_ris_routes_ids / total_ris_routes_ids if total_ris_routes_ids > 0 else 0
@@ -216,45 +219,49 @@ def save_conflation_qa_task(
     logger.info("---------------------------")
 
     # Remove existing file if it exists
-    if os.path.exists(output_gpkg_path):
-        os.remove(output_gpkg_path)
+    if qa_output_gpkg.exists():
+        os.remove(qa_output_gpkg)
     else:
-        os.makedirs(os.path.dirname(output_gpkg_path), exist_ok=True)
+        qa_output_gpkg.parent.mkdir(parents=True, exist_ok=True)
 
     # Save layers to GeoPackage
     try:
         # geopandas to_file method is typically used with DataFrames having a 'geometry' column
         # Assuming roads_gdf, ris_gdf, unmatched_ris_gdf, and osrm_conflation_gdf are GeoDataFrames
         # and the to_file method is from geopandas.
-        roads_gdf.to_file(
-            filename=output_gpkg_path, layer="all_osm_edges", driver="GPKG"
-        )
+        roads_gdf.to_file(filename=qa_output_gpkg, layer="all_osm_edges", driver="GPKG")
         logger.info("Saved 'all_osm_edges' layer.")
 
-        ris_gdf.to_file(filename=output_gpkg_path, layer="all_ris", driver="GPKG")
+        ris_gdf.to_file(filename=qa_output_gpkg, layer="all_ris", driver="GPKG")
         logger.info("Saved 'all_ris' layer.")
 
         unmatched_ris_gdf.to_file(
-            filename=output_gpkg_path, layer="unmatched_ris", driver="GPKG"
+            filename=qa_output_gpkg, layer="unmatched_ris", driver="GPKG"
         )
         logger.info("Saved 'unmatched_ris' layer.")
 
-        logger.info(f"Successfully saved all layers to {output_gpkg_path}.")
+        logger.info(f"Successfully saved all layers to {qa_output_gpkg}.")
+
+        read_only_perms = stat.S_IREAD | stat.S_IRGRP | stat.S_IROTH
+        os.chmod(qa_output_gpkg, read_only_perms)
+        logger.debug(f"Task: Set file permissions to read-only for {qa_output_gpkg}")
 
     except Exception as e:
-        logger.error(f"Error saving GeoPackage layers to {output_gpkg_path}: {e}")
+        logger.error(f"Error saving GeoPackage layers to {qa_output_gpkg}: {e}")
         # Depending on the severity, you might raise a more specific exception
         raise  # Re-raise the exception to fail the task
 
-    return output_gpkg_path  # Return the path to the saved file
+    return qa_output_gpkg  # Return the path to the saved file
 
 
-@flow
+@flow(name="RIS Conflation Workflow")
 def perform_osmnx_conflation_flow(
     osm_pbf: str,
     ris_path: str,  # This will be used for loading RIS and as ris_gpkg_path
     nysdot_bridges_path: str,
     nysdot_large_culverts_path: str,
+    clean: bool = False,
+    verbose: bool = False,
 ):
     """
     Prefect flow that orchestrates the OSMnx and RIS conflation process.
@@ -267,6 +274,21 @@ def perform_osmnx_conflation_flow(
         osrm_host: OSRM server host address.
         output_dir: Directory to save the output GeoPackage.
     """
+
+    logger = get_run_logger()
+    log_level = logging.DEBUG if verbose else logging.INFO
+    logger.setLevel(log_level)
+    logging.getLogger().setLevel(log_level)
+
+    logger.info("--- Starting RIS Conflation Workflow Workflow ---")
+    logger.info(f"OSM Input: {osm_pbf}")
+    logger.info(f"RIS Input: {ris_path}")
+    logger.info(f"NYSDOT Bridges Input: {nysdot_bridges_path}")
+    logger.info(f"NYSDOT Large Culverts Input: {nysdot_large_culverts_path}")
+    logger.info(f"Clean Run: {clean}")
+    logger.info(f"Verbose Logging: {verbose}")
+    logger.info("Integrity checks are always enabled.")
+
     osrm_cleanup = None
     try:
         # [1] Create or load enriched OSMnx graph
@@ -278,6 +300,41 @@ def perform_osmnx_conflation_flow(
         region_name = enriched_osm["region_name"]
         roads_gdf = enriched_osm["edges_gdf"]
         buffered_region_gdf = enriched_osm["buffered_region_gdf"]
+
+        output_dir = experiment_data_dir / region_name
+        output_gpkg = output_dir / f"e009-pjt-ris-conflation.{region_name}.gpkg"
+        qa_output_gpkg = output_dir / f"qa-e009-pjt-ris-conflation.{region_name}.gpkg"
+
+        if clean and output_dir.exists():
+            logger.warning(
+                f"Clean flag is True. Removing existing output directory: {output_dir}"
+            )
+            try:
+                shutil.rmtree(output_dir)
+                logger.info(f"Successfully removed directory: {output_dir}")
+            except OSError as e:
+                logger.error(
+                    f"Failed to remove directory {output_dir}: {e}", exc_info=True
+                )
+                # Decide if this is a fatal error or if we can proceed
+                # For now, re-raise to stop the flow if cleanup fails
+                raise RuntimeError(
+                    f"Failed to clean output directory {output_dir}"
+                ) from e
+
+            # Re-create the directory after removing it, ensuring it exists for saving later
+            output_dir.mkdir(
+                parents=True, exist_ok=False
+            )  # exist_ok=False to ensure it was removed
+
+        if not clean and output_gpkg.is_file():
+            logger.info(f"Output file already exists: {output_gpkg}")
+            logger.info(
+                "Clean flag is False. Skipping analysis and returning existing path."
+            )
+            return str(output_gpkg)
+        elif not clean and not output_gpkg.is_file():
+            logger.info("Output file does not exist. Proceeding with analysis.")
 
         # [2] Initialize pyproj Geod
         geod = initialize_geod_task()
@@ -337,19 +394,20 @@ def perform_osmnx_conflation_flow(
         )
 
         # [11] Save results to GeoPackage and print statistics
-        saved_output_path = save_conflation_output_task(
-            osrm_conflation_gdf=osrm_conflation_gdf,
-            region_name=region_name,
+        save_conflation_output_task(
+            osrm_conflation_gdf=osrm_conflation_gdf,  #
+            output_gpkg=output_gpkg,
         )
 
         # [11] Save results to GeoPackage and print statistics
         save_conflation_qa_task(
-            osrm_conflation_gdf=osrm_conflation_gdf,
+            roads_gdf=roads_gdf,
             ris_gdf=ris_gdf,
-            enriched_osm=enriched_osm,
+            osrm_conflation_gdf=osrm_conflation_gdf,
+            qa_output_gpkg=qa_output_gpkg,
         )
 
-        return saved_output_path  # Return the path to the final output file
+        return output_gpkg  # Return the path to the final output file
     finally:
         try:
             if osrm_cleanup:
@@ -362,25 +420,44 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Run OSMnx and RIS Conflation Prefect Flow"
     )
+
     parser.add_argument(
         "--osm-pbf",  #
         required=True,
         help="Path to the OSM PBF file",
     )
+
     parser.add_argument(
         "--ris-path",
         required=True,
         help="Path to the RIS data (milepoint snapshot or GPKG)",
     )
+
     parser.add_argument(
         "--nysdot-bridges-path",
         required=True,
         help="Path to the NYSDOT bridges shapefile",
     )
+
     parser.add_argument(
         "--nysdot-large-culverts-path",
         required=True,
         help="Path to the NYSDOT large culverts shapefile",
+    )
+
+    parser.add_argument(
+        "--clean",
+        action="store_true",
+        help=(
+            "If set, remove the output directory for the region before running the analysis."
+            "If not set, the analysis will skip calculations if previous results exists for the region."
+        ),
+    )
+
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Enable verbose (DEBUG level) logging for the workflow.",
     )
 
     args = parser.parse_args()
@@ -391,6 +468,8 @@ if __name__ == "__main__":
         ris_path=args.ris_path,
         nysdot_bridges_path=args.nysdot_bridges_path,
         nysdot_large_culverts_path=args.nysdot_large_culverts_path,
+        clean=args.clean,
+        verbose=args.verbose,
     )
 
     print(f"\nConflation flow finished. Output saved to: {final_output_gpkg_path}")

@@ -252,9 +252,7 @@ def compute_louvain_communities(
     """
     # Note: Ensure the environment has the necessary library if nx.louvain_communities requires it.
     # NetworkX >= 2.6 typically includes a native implementation or handles the dependency.
-    return _compute_networkx_metric_core(
-        g=g,
-        nx_function=nx.algorithms.community.louvain_communities,
+    return nx.algorithms.community.louvain_communities(
+        G=g,  #
         weight="travel_time",
-        # Add resolution, seed, etc. if needed
     )

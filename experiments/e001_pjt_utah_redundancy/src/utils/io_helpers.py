@@ -1,4 +1,5 @@
 import os
+import stat
 from os import PathLike
 from pathlib import Path
 
@@ -14,16 +15,13 @@ def create_detours_gpkg(
     detours_info_df: pd.DataFrame,
     base_paths_df: pd.DataFrame | None = None,
     detour_paths_df: pd.DataFrame | None = None,
-    mkdir: bool = True,
 ) -> PathLike:
     if not filename:
         raise ValueError("filename is required")
 
-    if mkdir:
-        # Ensure the directory path to filename exists.
-        fpath = Path(filename)
-        dir = fpath.parent
-        dir.mkdir(parents=True, exist_ok=True)
+    # Ensure the directory path to filename exists.
+    fpath = Path(filename)
+    fpath.parent.mkdir(parents=True, exist_ok=True)
 
     try:
         os.remove(filename)
@@ -70,6 +68,9 @@ def create_detours_gpkg(
         driver="GPKG",
         engine="pyogrio",
     )
+
+    read_only_perms = stat.S_IREAD | stat.S_IRGRP | stat.S_IROTH
+    os.chmod(fpath, read_only_perms)
 
     return filename
 

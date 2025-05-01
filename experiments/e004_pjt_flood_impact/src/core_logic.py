@@ -1,3 +1,53 @@
+"""
+**Explanation of Integrity Hash Checks**
+
+In complex data processing pipelines like this flood impact analysis, data
+objects (like GeoDataFrames and NetworkX graphs) are passed between different
+functions or tasks. Each step relies on the output of the previous one. A
+critical challenge is ensuring that the *exact same* data structures,
+particularly with consistent indices or graph structures, are used throughout
+the relevant parts of the pipeline.
+
+For example:
+
+* The `identify_impacted_edges` function needs the `nonbridge_spans_gdf` and
+* `bridge_spans_gdf` to have indices that align perfectly with the edges in the
+* `osmnx_simplified_g`.  The `calculate_highest_road_risk` function depends on
+* the specific structure and multi-level index of the
+* `nonbridge_spans_floodplains_join_gdf` created by the spatial join.  The final
+* `add_impact_columns_to_gdf` function must operate on the original `roads_gdf`
+* to correctly map impact results back to the road segments.
+
+Subtle bugs can arise if, due to coding errors or unexpected side effects during
+development or refactoring, a function receives a slightly modified or different
+version of a DataFrame or graph than expected. Indices might get reset, rows
+dropped, or graph structures altered, leading to incorrect results or runtime
+errors that can be hard to diagnose.
+
+The integrity hashing mechanism was introduced to address this:
+
+1.  **Fingerprinting:** When key data objects (Graph, DataFrames) are first
+created or processed, a unique hash value (an integer "fingerprint") is
+calculated based on their structure (for graphs) or their index (for
+DataFrames).  2.  **Tracking:** These hashes are stored in the
+`integrity_hashes` dictionary, keyed by an `IntegrityHashKey` Enum member (e.g.,
+`IntegrityHashKey.ROADS`).  3.  **Verification:** Before a function uses a
+critical input object, it calls `verify_integrity_hashes`. This helper function
+recalculates the hash of the *current* object being passed in and compares it to
+the *expected* hash stored in the `integrity_hashes` dictionary.  4.  **Error
+Prevention:** If the hashes don't match, it means the object has been
+unexpectedly altered since its hash was first calculated, and the function
+raises an `AssertionError`, stopping the workflow before incorrect data can be
+processed.
+
+Essentially, the integrity checks act as explicit assertions that guarantee the
+structural consistency of the data as it flows through the pipeline, making the
+process more robust and reliable. While the core logic functions now have an
+`Optional` parameter to potentially bypass these checks, the main Prefect flow
+currently ensures they are always performed by providing the necessary hash
+dictionary.
+"""
+
 import logging
 import uuid
 import weakref

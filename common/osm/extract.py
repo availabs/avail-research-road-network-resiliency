@@ -21,7 +21,9 @@ this_dir = os.path.dirname(os.path.abspath(__file__))
 OSMOSIS = os.path.join(this_dir, "../../lib/osmosis/latest/bin/osmosis")
 
 DEFAULT_OSM_EXTRACT_BUFFER_DIST_MI = 10
-DEFAULT_OSM_EXTRACTS_DIR = os.path.join(__file__, "../../data/processed/osm")
+DEFAULT_OSM_EXTRACTS_DIR = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "../../data/processed/osm")
+)
 
 
 def get_osm_version_from_pbf_filename(osm_pbf: PathLike):

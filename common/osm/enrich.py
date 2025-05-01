@@ -9,7 +9,7 @@ from collections.abc import Iterable
 from enum import Enum
 from os import PathLike
 from pprint import pprint
-from typing import List, Literal, Optional, TypedDict, Union
+from typing import List, Literal, Optional, Tuple, TypeAlias, TypedDict, Union
 
 import geopandas as gpd
 import networkx as nx
@@ -20,7 +20,7 @@ import pyrosm
 import shapely
 from geopandas import GeoDataFrame
 from networkx import MultiDiGraph
-from shapely import LineString, MultiLineString
+from shapely import LineString
 from tqdm import tqdm
 
 from common.constants import DEFAULT_BUFFER_DIST_MI, MILES_PER_METER
@@ -37,6 +37,8 @@ logger = logging.getLogger(__name__)
 osmnx_pickle_dir = "../../data/pickles/osmnx/enriched-osm"
 
 ENRICH_VERSION = "0.1.0"
+
+OSMEdgeID: TypeAlias = Tuple[int, int, int]  # (u, v, key)
 
 
 class RoadClass(Enum):

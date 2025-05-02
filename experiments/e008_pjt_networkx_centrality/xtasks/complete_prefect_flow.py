@@ -487,7 +487,7 @@ def network_metrics_flow(
             "All metric calculations successful. Proceeding with GeoPackage creation."
         )
         # Submit GPKG task, ensuring it waits for all metric tasks implicitly
-        output_gpkg = create_geopackage_task(
+        create_geopackage_task(
             nodes_gdf=nodes_gdf,
             edges_gdf=edges_gdf,
             region_name=region_name,

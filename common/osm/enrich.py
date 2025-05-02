@@ -34,7 +34,10 @@ from common.us_census.tiger.utils import (
 
 logger = logging.getLogger(__name__)
 
-osmnx_pickle_dir = "../../data/pickles/osmnx/enriched-osm"
+THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+OSMNX_PICKLE_DIR = os.path.abspath(
+    os.path.join(THIS_DIR, "../../data/pickles/osmnx/enriched-osm")
+)
 
 ENRICH_VERSION = "0.1.0"
 
@@ -1586,7 +1589,7 @@ def get_enriched_osm_pickle_path(osm_pbf: PathLike):
     base_without_extension = os.path.splitext(base)[0]
 
     pickled_name = base_without_extension + ".pickle"
-    pickled_path = os.path.join(osmnx_pickle_dir, pickled_name)
+    pickled_path = os.path.join(OSMNX_PICKLE_DIR, pickled_name)
 
     return pickled_path
 

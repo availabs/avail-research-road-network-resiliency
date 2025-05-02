@@ -8,11 +8,14 @@ COPY --from=ghcr.io/astral-sh/uv@sha256:2381d6aa60c326b71fd40023f921a0a3b8f91b14
 # Necessities: required for analysis
 #   NOTE: We are adding ssh so we can easily ssh into and scp file to/from containers on remote servers.
 RUN apt-get update && apt-get install -y --no-install-recommends \
+  build-essential \
   default-jre \
+  docker \
   gcc \
   gdal-bin \
   git \
   openssh-server \
+  libgdal-dev \
   libpq-dev \
   postgresql-client \
   python3-dev \

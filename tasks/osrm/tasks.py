@@ -12,7 +12,8 @@ from docker.models.containers import Container
 # FIXME: Hard-coding these for now. Need to implement a centralized store for canonical versions.
 DEFAULT_OSM_VERSION = "nonservice-roadways-buffer-50mi-state-36_us-250101"
 
-OSRM_DATA_DIR = os.path.abspath("../../data/processed/osrm")
+THIS_DIR = os.path.abspath(os.path.dirname(__file__))
+OSRM_DATA_DIR = os.path.abspath(os.path.join(THIS_DIR, "../../data/processed/osrm"))
 
 
 @task(name="Create OSRM Container")

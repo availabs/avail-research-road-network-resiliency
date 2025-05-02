@@ -1,0 +1,6 @@
+#!/bin/bash
+
+set -Eeou pipefail
+
+# docker-compose up --detach rnr-db
+docker-compose up rnr-analysis

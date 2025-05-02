@@ -1,6 +1,6 @@
 services:
     rnr-analysis:
-      image: avail-research-rnr:latest
+      image: avail-research-rnr:0.1.0
       container_name: rnr-analysis
       restart: 'no'
       ports:

@@ -1,0 +1,31 @@
+#!/bin/bash
+
+set -aeou pipefail
+
+source .env
+
+OSM_PBF="${PWD}/../../data/processed/osm/$OSRM_OSM_VERSION.osm.pbf"
+OSRM_DATA_DIR="${PWD}/../../data/processed/osrm/${OSRM_OSM_VERSION}"
+
+mkdir -p "$OSRM_DATA_DIR"
+
+cp --update "$OSM_PBF" "$OSRM_DATA_DIR"
+
+docker \
+  run \
+  -t \
+  -v "$OSRM_DATA_DIR":/data/ \
+  "$OSRM_DOCKER_VERSION" \
+  osrm-extract \
+  -p /opt/car.lua \
+  /data/$OSRM_OSM_VERSION.osm.pbf \
+  || echo "osrm-extract failed"
+
+docker \
+  run \
+  -t \
+  -v "$OSRM_DATA_DIR":/data/ \
+  $OSRM_DOCKER_VERSION \
+  osrm-contract \
+  /data/$OSRM_OSM_VERSION.osm.pbf \
+  || echo "osrm-extract failed"

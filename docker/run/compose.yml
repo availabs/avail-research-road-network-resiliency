@@ -10,30 +10,18 @@ services:
         - ${PWD}/mount_dirs/shared_data:/shared_data
         # .venv is platform specific, so container needs its own.
         - ${PWD}/mount_dirs/rnr-analysis-venv:/home/availien/rnr-analysis/.venv
+        - ${PWD}/mount_dirs/avail_research_road_network_resiliency/:/home/availien/rnr-analysis/avail_research_road_network_resiliency/
+        - ${PWD}/mount_dirs/avail_research_road_network_resiliency.egg/:/home/availien/rnr-analysis/avail_research_road_network_resiliency.egg/
         - ${PWD}/../../:/home/availien/rnr-analysis/
       shm_size: 6g
-    rnr-db:
-      image: pgrouting/pgrouting:16-3.4-3.6.1
-      container_name: rnr-db
-      restart: 'no'
-      ports:
-        - ${PGPORT}:5432
-      volumes:
-        - ${PWD}/mount_dirs/pg_data:/var/lib/postgresql/data
-        - ${PWD}/mount_dirs/shared_data:/shared_data
-      environment:
-        - POSTGRES_USER=$PGUSER
-        - POSTGRES_PASSWORD=$PGPASSWORD
-        - POSTGRES_DB=$PGDATABASE
-      shm_size: 2g
     rnr-osrm:
-      image: ghcr.io/project-osrm/osrm-backend
+      image: ${OSRM_DOCKER_VERSION}
       container_name: rnr-osrm
       restart: 'no'
       ports:
         - ${OSRM_PORT}:5000
       volumes:
-        - ${PWD}/mount_dirs/osrm:/data/
+        - ${PWD}/../../data/processed/osrm/${OSRM_OSM_VERSION}:/data/
       entrypoint:
         - 'osrm-routed'
         - '--max-matching-size'

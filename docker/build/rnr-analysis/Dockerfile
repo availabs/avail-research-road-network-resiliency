@@ -10,7 +10,6 @@ COPY --from=ghcr.io/astral-sh/uv@sha256:2381d6aa60c326b71fd40023f921a0a3b8f91b14
 RUN apt-get update && apt-get install -y --no-install-recommends \
   build-essential \
   default-jre \
-  docker \
   gcc \
   gdal-bin \
   git \

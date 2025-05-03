@@ -1,3 +1,4 @@
+import argparse
 import logging
 import os
 from os import PathLike
@@ -102,3 +103,52 @@ def enrich_osm_task(
     except Exception as e:
         logger.error(f"Failed to create/load graph from {osm_pbf}: {e}", exc_info=True)
         raise
+
+
+# --- Command-Line Interface ---
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="OSM pre-processing")
+
+    subparsers = parser.add_subparsers(
+        dest="command", required=True, help="Available tasks"
+    )
+
+    extract_parser = subparsers.add_parser(
+        name="extract",
+        help="Create an osm.pbf by extracting the specified region (geoid) from the base-osm-pbf",
+    )
+
+    # --- CLI Arguments ---
+    extract_parser.add_argument(
+        "--geoid",
+        type=str,
+        required=True,
+        help="The GEOID (e.g., county FIPS code) for the region under study.",
+    )
+    # Input Path Arguments
+    extract_parser.add_argument(
+        "--base-osm-pbf",
+        type=str,
+        required=True,
+        help="Path to the base OSM PBF file.",
+    )
+    # Input Path Arguments
+    extract_parser.add_argument(
+        "--buffer-dist-mi",
+        type=int,
+        default=10,
+        help="Buffer distance in miles around the geographic region's boundary.",
+    )
+
+    args = parser.parse_args()
+
+    if args.command == "extract":
+        osm_pbf = create_osm_region_road_network_extract_pbf(
+            base_osm_pbf=args.base_osm_pbf,
+            geoid=args.geoid,
+            buffer_dist_mi=args.buffer_dist_mi,
+        )
+
+        print(osm_pbf)
+    else:
+        raise ValueError("Unsupported command")

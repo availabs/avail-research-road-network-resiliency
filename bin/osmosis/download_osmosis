@@ -1,0 +1,20 @@
+#!/bin/bash
+
+set -Eeuo pipefail                                                                                                                 
+INSTALL_DIR=../../lib/osmosis
+
+OSMOSIS_VERSION=0.49.2
+OSMOSIS_TAR_NAME=osmosis-$OSMOSIS_VERSION.tar
+
+mkdir -p $INSTALL_DIR
+
+wget \
+  --directory-prefix=$INSTALL_DIR \
+  https://github.com/openstreetmap/osmosis/releases/download/$OSMOSIS_VERSION/$OSMOSIS_TAR_NAME
+
+tar \
+  --directory $INSTALL_DIR \
+  -xf \
+  $INSTALL_DIR/$OSMOSIS_TAR_NAME
+
+ln -s ./osmosis-0.49.2 $INSTALL_DIR/latest

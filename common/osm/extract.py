@@ -104,6 +104,11 @@ def output_osmosis_filter_poly(
     else:
         raise ValueError("GeoDataFrame does not contain polygonal geometries.")
 
+    os.makedirs(
+        name=os.path.dirname(out_filename),  #
+        exist_ok=True,
+    )
+
     if not out_filename.endswith(".poly"):
         out_filename += ".poly"
 

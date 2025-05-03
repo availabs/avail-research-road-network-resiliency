@@ -226,7 +226,7 @@ def load_ris_data(
 def perform_osrm_matching(
     ris_gdf: gpd.GeoDataFrame,
     osm_graph: nx.MultiDiGraph,
-    osrm_host: str,
+    # osrm_host: str,
     geod: pyproj.Geod,
     osrm_profile: str = DEFAULT_OSRM_PROFILE,
 ) -> pd.DataFrame:
@@ -383,7 +383,7 @@ def perform_osrm_matching(
                 try:
                     # --- Call OSRM Match API ---
                     osrm_api_result = osrm_matching_logic.call_osrm_api_logic(
-                        host=osrm_host,
+                        # host=osrm_host,
                         coordinates=flattened_coords,
                         reverse_input=reverse_input,
                         osm_subnet_name=osrm_profile,
@@ -1677,7 +1677,7 @@ def perform_osmnx_conflation(
     ris_path: str,
     nysdot_bridges_path: str,
     nysdot_large_culverts_path: str,
-    osrm_host: str,
+    # osrm_host: str,
 ):
     """
     Orchestrates the OSMnx and RIS conflation process.
@@ -1715,7 +1715,7 @@ def perform_osmnx_conflation(
     osrm_match_results_df = perform_osrm_matching(
         ris_gdf=ris_gdf,
         osm_graph=G,
-        osrm_host=osrm_host,
+        # osrm_host=osrm_host,
         geod=geod,
     )
 

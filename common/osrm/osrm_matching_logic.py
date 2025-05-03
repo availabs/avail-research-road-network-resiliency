@@ -153,6 +153,7 @@ Attributes:
 
 import json
 import logging
+import os
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
@@ -162,6 +163,15 @@ import networkx as nx
 import pandas as pd  # Used for describe() in stats, can be removed if not essential.
 import pyproj
 import shapely
+from dotenv import load_dotenv
+
+load_dotenv()
+
+AVAIL_RNR_OSRM_HOST = os.getenv(key="AVAIL_RNR_HOST")
+AVAIL_RNR_OSRM_PORT = os.getenv(key="AVAIL_RNR_OSRM_PORT")
+
+AVAIL_RNR_OSRM_URL = f"http://{AVAIL_RNR_OSRM_HOST}:{AVAIL_RNR_OSRM_PORT}"
+
 
 # --- Custom Exceptions ---
 
@@ -608,10 +618,11 @@ logger = logging.getLogger(__name__)
 class OsrmApiClient:
     """Internal helper class for handling OSRM HTTP API calls."""
 
-    def __init__(self, host: str):
-        if not host or not host.startswith("http"):
-            raise ValueError("Invalid OSRM host URL provided.")
-        self.host = host.rstrip("/")
+    # def __init__(self, host: str):
+    def __init__(self):
+        # if not host or not host.startswith("http"):
+        #     raise ValueError("Invalid OSRM host URL provided.")
+        self.host = AVAIL_RNR_OSRM_URL.rstrip("/")
 
     def match(
         self,
@@ -740,7 +751,7 @@ def flatten_feature_coordinates_logic(
 
 
 def call_osrm_api_logic(
-    host: str,
+    # host: str = AVAIL_RNR_OSRM_HOST,
     coordinates: List[Tuple[float, float]],
     reverse_input: bool,
     osm_subnet_name: str = "driving",
@@ -768,7 +779,8 @@ def call_osrm_api_logic(
                            the JSON response's `code` field is not "Ok".
         ValueError: If inputs like host or coordinates are invalid.
     """
-    client = OsrmApiClient(host)
+    # client = OsrmApiClient(host)
+    client = OsrmApiClient()
     effective_options = options if options else {}
 
     # Reverse coordinates if requested

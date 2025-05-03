@@ -25,7 +25,8 @@ from experiments.e009_pjt_osm_ris_conflation.src.ris_processing_pipeline import 
     select_best_ris_for_osmnx_edge,
 )
 from tasks.osm import enrich_osm_task
-from tasks.osrm import start_osrm_container_task
+
+# from tasks.osrm import start_osrm_docker_container_task
 
 conflation_output_dir = os.path.join(
     os.path.dirname(__file__), "../data/processed/conflation/"
@@ -55,14 +56,17 @@ def load_ris_data_task(ris_source_path: str, county_geoid: str) -> pd.DataFrame:
 
 @task
 def perform_osrm_matching_task(
-    ris_gdf: pd.DataFrame, osm_graph: Any, osrm_host: str, geod: pyproj.Geod
+    ris_gdf: pd.DataFrame,  #
+    osm_graph: Any,
+    geod: pyproj.Geod,
+    # osrm_host: str,
 ) -> pd.DataFrame:
     """Task to perform OSRM matching."""
-    print(f"Performing OSRM matching using host {osrm_host}")
+    # print(f"Performing OSRM matching using host {osrm_host}")
     return perform_osrm_matching(
         ris_gdf=ris_gdf,
         osm_graph=osm_graph,
-        osrm_host=osrm_host,
+        # osrm_host=osrm_host,
         geod=geod,
     )
 
@@ -345,13 +349,13 @@ def perform_osmnx_conflation_flow(
             county_geoid=geoid,
         )
 
-        osrm_host, osrm_cleanup = start_osrm_container_task(osm_pbf=osm_pbf)
+        # osrm_host, osrm_cleanup = start_osrm_docker_container_task(osm_pbf=osm_pbf)
 
         # [4] Perform OSRM matching
         osrm_match_results_df = perform_osrm_matching_task(
             ris_gdf=ris_gdf,
             osm_graph=G,
-            osrm_host=osrm_host,
+            # osrm_host=osrm_host,
             geod=geod,
         )
 

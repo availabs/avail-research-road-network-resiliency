@@ -282,7 +282,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--max-workers",
         type=int,
-        default=os.cpu_count() or 2,
+        default=2,
         help="Maximum number of concurrent Prefect tasks. Default: CPU count or 2.",
     )
     parser.add_argument(

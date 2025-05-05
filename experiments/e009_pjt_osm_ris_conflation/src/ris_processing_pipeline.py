@@ -34,6 +34,8 @@ from common.nysdot.structures.nysdot_large_culverts import (
 )
 from common.osm.enrich import create_enriched_osmnx_graph_for_region
 
+duckdb.install_extension('sqlite')
+
 # --- Logger Setup ---
 # Configure logging in the calling script/orchestrator (e.g., Prefect flow, worker script)
 # Example configuration:

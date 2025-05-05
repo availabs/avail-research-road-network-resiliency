@@ -167,11 +167,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-AVAIL_RNR_OSRM_HOST = os.getenv(key="AVAIL_RNR_HOST")
-AVAIL_RNR_OSRM_PORT = os.getenv(key="AVAIL_RNR_OSRM_PORT")
-
-AVAIL_RNR_OSRM_URL = f"http://{AVAIL_RNR_OSRM_HOST}:{AVAIL_RNR_OSRM_PORT}"
-
+AVAIL_RNR_OSRM_URL = os.getenv(key="AVAIL_RNR_OSRM_URL")
+# print(f"\n\n==========> AVAIL_RNR_OSRM_URL={AVAIL_RNR_OSRM_URL} =========\n\n")
 
 # --- Custom Exceptions ---
 

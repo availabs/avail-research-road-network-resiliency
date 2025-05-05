@@ -39,9 +39,10 @@ def process_base_edges_task(
     logger = get_run_logger()
     logger.info("Processing base edges (e000)...")
 
-    assert roadways_gdf.index.names == ["u", "v", "key"], (
-        f"Input GDF index names must be ['u', 'v', 'key'], got {roadways_gdf.index.names}"
-    )
+    if roadways_gdf.index.names != ["u", "v", "key"]:
+        raise ValueError(
+            f"Input GDF index names must be ['u', 'v', 'key'], got {roadways_gdf.index.names}"
+        )
 
     # Assert '_intersects_region_' is boolean type
     assert pd.api.types.is_bool_dtype(roadways_gdf["_intersects_region_"]), (
@@ -68,8 +69,11 @@ def process_base_edges_task(
     cols_to_round = ["length", "speed_kph", "travel_time"]
     region_roadways_gdf[cols_to_round] = region_roadways_gdf[cols_to_round].round(3)
 
-    roadway_cols_to_drop = ["timestamp", "tags", "osm_way_along_info"]
-    region_roadways_gdf.drop(columns=roadway_cols_to_drop, inplace=True)
+    cols_to_drop = ["timestamp", "tags", "osm_way_along_info", "merged_edges"]
+    cols_to_drop_existing = [
+        col for col in cols_to_drop if col in region_roadways_gdf.columns
+    ]
+    region_roadways_gdf.drop(columns=cols_to_drop_existing, inplace=True)
 
     region_roadways_gdf = region_roadways_gdf.add_prefix("e000_")
     region_roadways_gdf.rename(columns={"e000_geometry": "geometry"}, inplace=True)

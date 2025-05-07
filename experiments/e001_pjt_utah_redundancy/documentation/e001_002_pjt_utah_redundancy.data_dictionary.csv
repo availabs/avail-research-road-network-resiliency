@@ -1,0 +1,18 @@
+Column Name,Data Type,Description
+base_travel_time_sec,Real,"The travel time (in seconds) of the shortest path between the analysis origin and destination, assuming the analyzed edge is open."
+base_length_miles,Real,"The length (in miles) of the shortest path between the analysis origin and destination, assuming the analyzed edge is open."
+detour_travel_time_sec,Real,The travel time (in seconds) of the shortest detour path between the analysis origin and destination when the analyzed edge is closed.
+detour_length_miles,Real,The length (in miles) of the shortest detour path between the analysis origin and destination when the analyzed edge is closed.
+difference_sec,Real,The additional travel time (in seconds) incurred due to the detour (detour_travel_time_sec - base_travel_time_sec).
+difference_miles,Real,The additional travel distance (in miles) incurred due to the detour (detour_length_miles - base_length_miles).
+difference_ratio,Real,"The ratio of detour travel time to base travel time (detour_travel_time_sec / base_travel_time_sec), if base travel time is greater than zero."
+origin_node_id,Integer,The unique identifier of the network node designated as the origin for the shortest path analysis.
+origin_node_upstream_count,Integer,The number of road segments/intersections traced upstream from the analyzed edge to determine the origin node.
+origin_intersection_name,String,"A descriptive name for the intersection at the origin node (e.g., ""Main St AND First Ave"")."
+origin_lon,Real,The longitude of the origin node.
+origin_lat,Real,The latitude of the origin node.
+destination_node_id,Integer,The unique identifier of the network node designated as the destination for the shortest path analysis.
+destination_node_downstream_count,Integer,The number of road segments/intersections traced downstream from the analyzed edge to determine the destination node.
+destination_intersection_name,String,A descriptive name for the intersection at the destination node.
+destination_lon,Real,The longitude of the destination node.
+destination_lat,Real,The latitude of the destination node.

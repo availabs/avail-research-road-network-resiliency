@@ -1,0 +1,13 @@
+name,type,description,calculation
+fid,INTEGER,Unique feature ID (primary key),N/A
+geom,LINESTRING,Geometry of the road segment,OSMnx
+u,INTEGER,Start node ID of the road segment,OSMnx
+v,INTEGER,End node ID of the road segment,OSMnx
+key,INTEGER,Key of the edge in the MultiDiGraph,OSMnx
+node_betweenness_centrality_u,REAL,Node betweenness centrality for the start node (u),"networkx.betweenness_centrality(G, weight='travel_time')"
+node_betweenness_centrality_v,REAL,Node betweenness centrality for the end node (v),"networkx.betweenness_centrality(G, weight='travel_time')"
+edge_betweenness_centrality,REAL,Edge betweenness centrality of the road segment,"networkx.edge_betweenness_centrality(G, weight='travel_time')"
+closeness_centrality_u,REAL,Closeness centrality for the start node (u),networkx.closeness_centrality(G)
+closeness_centrality_v,REAL,Closeness centrality for the end node (v),networkx.closeness_centrality(G)
+louvain_community_u,INTEGER,Louvain community ID for the start node (u),"networkx.community.louvain_communities(G, weight='travel_time')"
+louvain_community_v,INTEGER,Louvain community ID for the end node (v),"networkx.community.louvain_communities(G, weight='travel_time')"

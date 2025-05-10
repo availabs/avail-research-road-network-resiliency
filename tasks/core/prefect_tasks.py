@@ -208,6 +208,64 @@ def process_e004_task(output_gpkg: PathLike) -> pd.DataFrame:
 
 
 @task(log_prints=True)
+def process_e007_task(
+    output_gpkg: str,  #
+    output_layer: str,  #
+) -> pd.DataFrame:
+    """
+    Processes the output GPKG from experiment e007 (TRANSCOM Events).
+    Reads 'output_layer'. Verifies required columns exist, sets index.
+
+    Args:
+        output_gpkg: Path to the e007 GPKG file (can be zipped).
+        output_layer: Layer in the e007 GPKG file containing the results.
+
+    Returns:
+        Processed DataFrame indexed by (u, v, key) with 'e007_' prefix.
+
+    Raises: See underlying functions (FileNotFoundError, AssertionError, KeyError, etc.)
+    """
+    logger = get_run_logger()
+    logger.info(f"Processing e007 GPKG: {output_gpkg}, layer_name={output_layer}")
+
+    # Let FileNotFoundError propagate
+    df = gpd.read_file(
+        filename=output_gpkg,  #
+        layer=output_layer,
+        engine="pyogrio",
+    )
+
+    if "geometry" in df.columns:
+        df = df.drop(columns=["geometry"])
+
+    # Assert index columns exist in columns
+    if not all(col in df.columns for col in ["u", "v", "key"]):
+        raise ValueError(
+            "Missing columns 'u', 'v', 'key' needed for index in e007 GPKG."
+        )
+
+    # Set index based on columns (reverted to set_index as requested)
+    df.set_index(
+        keys=["u", "v", "key"],  #
+        inplace=True,
+        verify_integrity=True,
+    )
+
+    # Assert index is now correct after setting
+    if not isinstance(df.index, pd.MultiIndex) and df.index.names == [
+        "u",
+        "v",
+        "key",
+    ]:
+        raise ValueError("Index setting failed for e007 DataFrame.")
+
+    # Check which columns actually exist
+    df = df.add_prefix("e007_")
+
+    return df
+
+
+@task(log_prints=True)
 def process_e008_task(output_gpkg: str) -> pd.DataFrame:
     """
     Processes the output GPKG from experiment e008 (Network Metrics).
@@ -487,6 +545,8 @@ def save_results_task(
     # Let exceptions propagate from to_file
     logger.info(f"Saving aggregated GPKG to {fused_results_gpkg_fpath}")
 
+    fused_results_gpkg_fpath.unlink()
+
     gdf_to_save.to_file(
         filename=fused_results_gpkg_fpath,
         layer="road_network_resiliency_analysis",
@@ -504,6 +564,8 @@ def save_results_task(
         to_replace=np.nan,
         value=None,
     )
+
+    fused_results_csv_fpath.unlink()
 
     df_to_save.to_csv(
         fused_results_csv_fpath,

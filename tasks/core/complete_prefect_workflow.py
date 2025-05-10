@@ -20,6 +20,9 @@ from experiments.e001_pjt_utah_redundancy import (
 from experiments.e004_pjt_flood_impact import (
     complete_prefect_workflow as e004_flood_impact_flow,
 )
+from experiments.e007_pjt_transcom_flooding_events import (
+    complete_prefect_workflow as e007_transcom_events_flow,
+)
 from experiments.e008_pjt_networkx_centrality import (
     complete_prefect_workflow as e008_network_metrics_flow,
 )
@@ -34,6 +37,7 @@ from tasks.core.prefect_tasks import (
     process_base_edges_task,
     process_e001_task,
     process_e004_task,
+    process_e007_task,
     process_e008_task,
     process_e009_task,
     save_results_task,
@@ -49,8 +53,8 @@ THIS_DIR = pathlib.Path(__file__).parent.resolve()
 # Default assumption: 'data' is two levels up from 'core/'
 # Adjust if your structure is different
 DEFAULT_DATA_ROOT = THIS_DIR.parent.parent / "data"
-DEFAULT_PROCESSED_DATA_DIR = DEFAULT_DATA_ROOT / "processed"
 DEFAULT_RAW_DATA_DIR = DEFAULT_DATA_ROOT / "raw"
+DEFAULT_PROCESSED_DATA_DIR = DEFAULT_DATA_ROOT / "processed"
 
 DEFAULT_BASE_OSM_PBF = (
     DEFAULT_PROCESSED_DATA_DIR
@@ -59,6 +63,9 @@ DEFAULT_BASE_OSM_PBF = (
 DEFAULT_FLOODPLAINS_PATH = (
     DEFAULT_RAW_DATA_DIR
     / "avail/merged_floodplains/hazmit_db.s379_v841_avail_nys_floodplains_merged.1730233335.gpkg.zip"
+)
+DEFAULT_TRANSCOM_EVENTS_PATH = (
+    DEFAULT_RAW_DATA_DIR / "transcom/transcom-flooding-events.gpkg.zip"
 )
 DEFAULT_RIS_PATH = (
     DEFAULT_RAW_DATA_DIR / "nysdot/milepoint_snapshot/lrsn_milepoint.gpkg"
@@ -82,6 +89,7 @@ def main_flow(
     # --- Input Data Path Args ---
     base_osm_pbf: str = str(DEFAULT_BASE_OSM_PBF),
     floodplains_gpkg: str = str(DEFAULT_FLOODPLAINS_PATH),
+    transcom_events_gpkg: str = str(DEFAULT_TRANSCOM_EVENTS_PATH),
     ris_path: str = str(DEFAULT_RIS_PATH),
     nysdot_bridges_path: str = str(DEFAULT_NYSDOT_BRIDGES_PATH),
     nysdot_large_culverts_path: str = str(DEFAULT_NYSDOT_LARGE_CULVERS_PATH),
@@ -185,6 +193,12 @@ def main_flow(
         clean=clean,
         verbose=verbose,
     )
+    e007_gpkg, e007_layer = e007_transcom_events_flow(
+        osm_pbf=regional_osm_pbf_path,
+        transcom_events_gpkg=transcom_events_gpkg,
+        clean=clean,
+        verbose=verbose,
+    )
     e008_gpkg = e008_network_metrics_flow(
         osm_pbf=regional_osm_pbf_path,
         clean=clean,
@@ -214,6 +228,10 @@ def main_flow(
     logger.info("Submitting experiment result processing tasks...")
     processed_e001_df_future = process_e001_task.submit(output_gpkg=e001_gpkg)
     processed_e004_df_future = process_e004_task.submit(output_gpkg=e004_gpkg)
+    processed_e007_df_future = process_e007_task.submit(
+        output_gpkg=e007_gpkg,  #
+        output_layer=e007_layer,
+    )
     processed_e008_df_future = process_e008_task.submit(output_gpkg=e008_gpkg)
     processed_e009_df_future = process_e009_task.submit(output_gpkg=e009_gpkg)
 
@@ -225,6 +243,7 @@ def main_flow(
         "e001": processed_e001_df_future.result(),
         "e004": processed_e004_df_future.result(),
         "e008": processed_e008_df_future.result(),
+        "e007": processed_e007_df_future.result(),
         "e009": processed_e009_df_future.result(),
     }
     logger.info("Processing tasks completed.")

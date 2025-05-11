@@ -1,0 +1,17 @@
+Column Name,Data Type,Description
+u,Integer64,Starting node identifier of the OSM road segment that forms the primary key part.
+v,Integer64,Ending node identifier of the OSM road segment that forms the primary key part.
+key,Integer64,"Key differentiating multiple edges between the same u and v nodes (typically 0), forming part of the primary key."
+geom,LineString,The original geometry of the OSM road segment. Stored in EPSG:4326 (WGS 84).
+all_events_ids,String,"A sorted list of unique TRANSCOM event IDs for all pre-filtered events (relevant to flooding, road closures, or specific repairs) that affected this road segment."
+all_incidents_count,Integer64,"The count of distinct, continuous time periods (merged intervals or 'incidents') during which this road segment was affected by any relevant pre-filtered event."
+all_incidents_total_duration_hours,Real,"The total duration in hours that this road segment was affected by any pre-filtered relevant event, after merging all overlapping event times."
+road_closed_events_ids,String,A sorted list of unique TRANSCOM event IDs associated with 'road closed' conditions (where the 'event_closed_road' flag was true) affecting this road segment.
+road_closed_incidents_count,Integer64,"The count of distinct, continuous time periods during which 'road closed' conditions affected this road segment."
+road_closed_total_duration_hours,Real,"The total duration in hours this road segment was affected by 'road closed' conditions, with overlapping event times merged."
+road_flooded_events_ids,String,"A sorted list of unique TRANSCOM event IDs specifically classified as 'road_flooded' (where the 'road_flooded' flag was true, typically from 'WEATHER HAZARD') affecting this segment."
+road_flooded_incidents_count,Integer64,"The count of distinct, continuous time periods during which 'road_flooded' conditions affected this road segment."
+road_flooded_incidents_total_duration_hours,Real,"The total duration in hours this road segment was affected by 'road_flooded' conditions, with overlapping event times merged."
+road_repairs_events_ids,String,"A sorted list of unique TRANSCOM event IDs related to 'road_repairs' (where the 'road_repairs' flag was true, from construction/maintenance, potentially washout-related) affecting this segment."
+road_repairs_incidents_count,Integer64,"The count of distinct, continuous time periods during which 'road_repairs' conditions affected this road segment."
+road_repairs_incidents_total_duration_hours,Real,"The total duration in hours this road segment was affected by 'road_repairs' conditions, with overlapping event times merged."

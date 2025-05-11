@@ -968,7 +968,7 @@ def aggregate_roadway_flooding_event_data(
 
                     a.transcom_event_ids                         AS all_events_ids,
                     a.num_distinct_flood_intervals               AS all_incidents_count,
-                    a.total_duration_hours                       AS all_events_total_duration_hours,
+                    a.total_duration_hours                       AS all_incidents_total_duration_hours,
 
                     COALESCE(b.transcom_event_ids, [])           AS road_closed_events_ids,
                     COALESCE(b.num_distinct_flood_intervals, 0)  AS road_closed_incidents_count,
@@ -976,11 +976,11 @@ def aggregate_roadway_flooding_event_data(
 
                     COALESCE(c.transcom_event_ids, [])           AS road_flooded_events_ids,
                     COALESCE(c.num_distinct_flood_intervals, 0)  AS road_flooded_incidents_count,
-                    COALESCE(c.total_duration_hours, 0)          AS road_flooded_events_total_duration_hours,
+                    COALESCE(c.total_duration_hours, 0)          AS road_flooded_incidents_total_duration_hours,
 
                     COALESCE(d.transcom_event_ids, [])           AS road_repairs_events_ids,
                     COALESCE(d.num_distinct_flood_intervals, 0)  AS road_repairs_incidents_count,
-                    COALESCE(d.total_duration_hours, 0)          AS road_repairs_events_total_duration_hours
+                    COALESCE(d.total_duration_hours, 0)          AS road_repairs_incidents_total_duration_hours
 
                   FROM all_events_aggregated AS a
                     LEFT OUTER JOIN road_closed_events_aggregated AS b
@@ -989,7 +989,7 @@ def aggregate_roadway_flooding_event_data(
                       USING (u, v, key)
                     LEFT OUTER JOIN road_repairs_events_aggregated AS d
                       USING (u, v, key)
-                  ORDER BY all_events_total_duration_hours DESC
+                  ORDER BY u, v, key DESC
             """).to_df()
 
             result_df.set_index(keys=["u", "v", "key"], inplace=True)

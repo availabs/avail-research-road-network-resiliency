@@ -12,6 +12,6 @@ road_closed_total_duration_hours,Real,"The total duration in hours this road seg
 road_flooded_events_ids,String,"A sorted list of unique TRANSCOM event IDs specifically classified as 'road_flooded' (where the 'road_flooded' flag was true, typically from 'WEATHER HAZARD') affecting this segment."
 road_flooded_incidents_count,Integer64,"The count of distinct, continuous time periods during which 'road_flooded' conditions affected this road segment."
 road_flooded_total_duration_hours,Real,"The total duration in hours this road segment was affected by 'road_flooded' conditions, with overlapping event times merged."
-road_repairs_events_ids,String,"A sorted list of unique TRANSCOM event IDs related to 'road_repairs' (where the 'road_repairs' flag was true, from construction/maintenance, potentially washout-related) affecting this segment."
+road_repairs_events_ids,String,"A sorted list of unique TRANSCOM event IDs related to 'road_repairs' (where the 'road_repairs' flag was true, from washout repairs) affecting this segment."
 road_repairs_incidents_count,Integer64,"The count of distinct, continuous time periods during which 'road_repairs' conditions affected this road segment."
 road_repairs_total_duration_hours,Real,"The total duration in hours this road segment was affected by 'road_repairs' conditions, with overlapping event times merged."

@@ -78,7 +78,7 @@ AGGREGATED_DATA_DICTIONARY: List[Dict[str, Any]] = [
     {
         "Column Name": "road_repairs_events_ids",
         "Data Type": "String",  # Represents a list of strings
-        "Description": "A sorted list of unique TRANSCOM event IDs related to 'road_repairs' (where the 'road_repairs' flag was true, from construction/maintenance, potentially washout-related) affecting this segment.",
+        "Description": "A sorted list of unique TRANSCOM event IDs related to 'road_repairs' (where the 'road_repairs' flag was true, from washout repairs) affecting this segment.",
     },
     {
         "Column Name": "road_repairs_incidents_count",

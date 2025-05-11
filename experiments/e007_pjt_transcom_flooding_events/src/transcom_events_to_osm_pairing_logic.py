@@ -713,12 +713,12 @@ def aggregate_roadway_flooding_event_data(
             (u, v, key). Columns include:
             - 'all_events_ids': Sorted list of unique TRANSCOM event IDs for all
               relevant events affecting the road segment.
-            - 'all_intervals_count': Count of distinct merged time periods for
+            - 'all_incidents_count': Count of distinct merged time periods for
               all relevant events.
-            - 'all_events_total_duration_hours': Total duration in hours road
+            - 'all_incidents_total_duration_hours': Total duration in hours road
               segment was affected by any relevant event, overlaps resolved.
             - Similar columns for specific categories (e.g., 'road_closed_events_ids',
-              'road_closed_intervals_count', 'road_closed_total_duration_hours',
+              'road_closed_incidents_count', 'road_closed_total_duration_hours',
               and for 'road_flooded' and 'road_repairs').
 
     Raises:
@@ -976,11 +976,11 @@ def aggregate_roadway_flooding_event_data(
 
                     COALESCE(c.transcom_event_ids, [])           AS road_flooded_events_ids,
                     COALESCE(c.num_distinct_flood_intervals, 0)  AS road_flooded_incidents_count,
-                    COALESCE(c.total_duration_hours, 0)          AS road_flooded_incidents_total_duration_hours,
+                    COALESCE(c.total_duration_hours, 0)          AS road_flooded_total_duration_hours,
 
                     COALESCE(d.transcom_event_ids, [])           AS road_repairs_events_ids,
                     COALESCE(d.num_distinct_flood_intervals, 0)  AS road_repairs_incidents_count,
-                    COALESCE(d.total_duration_hours, 0)          AS road_repairs_incidents_total_duration_hours
+                    COALESCE(d.total_duration_hours, 0)          AS road_repairs_total_duration_hours
 
                   FROM all_events_aggregated AS a
                     LEFT OUTER JOIN road_closed_events_aggregated AS b

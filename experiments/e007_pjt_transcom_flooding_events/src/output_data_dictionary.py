@@ -71,7 +71,7 @@ AGGREGATED_DATA_DICTIONARY: List[Dict[str, Any]] = [
         "Description": "The count of distinct, continuous time periods during which 'road_flooded' conditions affected this road segment.",
     },
     {
-        "Column Name": "road_flooded_incidents_total_duration_hours",
+        "Column Name": "road_flooded_total_duration_hours",
         "Data Type": "Real",
         "Description": "The total duration in hours this road segment was affected by 'road_flooded' conditions, with overlapping event times merged.",
     },
@@ -86,7 +86,7 @@ AGGREGATED_DATA_DICTIONARY: List[Dict[str, Any]] = [
         "Description": "The count of distinct, continuous time periods during which 'road_repairs' conditions affected this road segment.",
     },
     {
-        "Column Name": "road_repairs_incidents_total_duration_hours",
+        "Column Name": "road_repairs_total_duration_hours",
         "Data Type": "Real",
         "Description": "The total duration in hours this road segment was affected by 'road_repairs' conditions, with overlapping event times merged.",
     },

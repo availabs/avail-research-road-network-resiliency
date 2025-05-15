@@ -10,9 +10,10 @@ import os
 import shutil
 import stat
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import geopandas as gpd
+import numpy as np
 import pandas as pd
 from prefect import flow, get_run_logger, task
 from pyproj import CRS  # Keep CRS for type hinting
@@ -396,6 +397,10 @@ def save_main_output_task(
             right_index=True,
             how="inner",
         )
+
+        for col in result_gdf.columns:
+            if isinstance(result_gdf[col].iloc[0], np.ndarray):
+                result_gdf[col] = result_gdf[col].apply(lambda x: x.tolist())
 
         result_gdf.to_file(
             filename=output_gpkg,  #

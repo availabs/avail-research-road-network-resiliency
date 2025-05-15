@@ -348,10 +348,11 @@ def get_geoids_with_prefix_for_geolevel(geoid_prefix, geolevel):
 
     return geoids
 
+
 def get_laea_crs_for_region(
-    region_gdf: gpd.GeoDataFrame
-):
-    assert region_gdf.crs.is_geographic, 'region_gdf CRS MUST be geographic'
+    region_gdf: gpd.GeoDataFrame #
+) -> pyproj.CRS:
+    assert region_gdf.crs.is_geographic, "region_gdf CRS MUST be geographic"
 
     # Compute the centroid of the region (using the union of all geometries).
     region_centroid = region_gdf.unary_union.centroid

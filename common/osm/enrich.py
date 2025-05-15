@@ -39,7 +39,7 @@ OSMNX_PICKLE_DIR = os.path.abspath(
     os.path.join(THIS_DIR, "../../data/pickles/osmnx/enriched-osm")
 )
 
-ENRICH_VERSION = "0.1.0"
+ENRICH_VERSION = "0.1.1"
 
 OSMEdgeID: TypeAlias = Tuple[int, int, int]  # (u, v, key)
 
@@ -1349,7 +1349,7 @@ def create_nonbridge_spans_gdf(edges_gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """
     Create a GeoDataFrame of non-bridge road segments from an edges GeoDataFrame.
 
-    Extracts non-bridge spans from `edges_gdf` using `generate_non_bridge_spans_along_info`
+    Extracts non-bridge spans from `edges_gdf` using `generate_nonbridge_spans_along_info`
     to identify gaps between bridge segments, converting these into a GeoDataFrame with
     segmented geometries. Complements `generate_bridges_gdf` in a disaster planning pipeline.
     Processes edges incrementally to minimize memory usage.
@@ -1381,7 +1381,7 @@ def create_nonbridge_spans_gdf(edges_gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
         if not row["osm_way_along_info"]:  # Skip if osm_way_along_info is empty
             continue
 
-        spans = generate_non_bridge_spans_along_info(row["osm_way_along_info"])
+        spans = generate_nonbridge_spans_along_info(row["osm_way_along_info"])
 
         for span_idx, span in enumerate(spans):
             span["u"] = u
@@ -1428,7 +1428,7 @@ def create_nonbridge_spans_gdf(edges_gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     return spans_df
 
 
-def generate_non_bridge_spans_along_info(osm_way_along_info):
+def generate_nonbridge_spans_along_info(osm_way_along_info):
     """
     Generate a list of non-bridge span dictionaries from OSM way info.
 
@@ -1677,7 +1677,18 @@ def create_enriched_osmnx_graph_for_region(
         include_base_osm_data=include_base_osm_data,
     )
 
-    assert d["edges_gdf"].crs == "EPSG:4326"
+    if d["edges_gdf"].crs != "EPSG:4326":
+        raise ValueError(
+            f"edges_gdf.crs MUST equal EPSG:4326, got {d['edges_gdf'].crs}"
+        )
+
+    d["g"].graph.setdefault("_region_name_", region_name)
+    d["nodes_gdf"].attrs["_region_name_"] = region_name
+    d["edges_gdf"].attrs["_region_name_"] = region_name
+    d["buffered_region_gdf"].attrs["_region_name_"] = region_name
+
+    if "G" in d:
+        d["G"].graph.setdefault("_region_name_", region_name)
 
     enriched_osm = d | dict(
         region_name=region_name,

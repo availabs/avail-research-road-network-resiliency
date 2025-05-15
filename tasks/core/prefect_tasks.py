@@ -1,3 +1,4 @@
+import ast
 import os
 import stat
 from csv import QUOTE_NONNUMERIC
@@ -259,6 +260,16 @@ def process_e007_task(
     ]:
         raise ValueError("Index setting failed for e007 DataFrame.")
 
+    event_id_list_cols = [
+        "all_events_ids",
+        "road_closed_events_ids",
+        "road_flooded_events_ids",
+        "road_repairs_events_ids",
+    ]
+    df[event_id_list_cols] = df[event_id_list_cols].applymap(
+        lambda val: ast.literal_eval(val) if isinstance(val, str) else None
+    )
+
     # Check which columns actually exist
     df = df.add_prefix("e007_")
 
@@ -488,7 +499,8 @@ def join_results_task(
 
 @task(log_prints=True)
 def save_results_task(
-    final_aggregated_gdf: gpd.GeoDataFrame, fused_results_gpkg: PathLike
+    final_aggregated_gdf: gpd.GeoDataFrame,  #
+    fused_results_gpkg: PathLike,
 ) -> Dict[str, str]:
     """
     Saves the final aggregated GeoDataFrame to GPKG and CSV formats.
@@ -545,7 +557,7 @@ def save_results_task(
     # Let exceptions propagate from to_file
     logger.info(f"Saving aggregated GPKG to {fused_results_gpkg_fpath}")
 
-    fused_results_gpkg_fpath.unlink()
+    fused_results_gpkg_fpath.unlink(missing_ok=True)
 
     gdf_to_save.to_file(
         filename=fused_results_gpkg_fpath,
@@ -565,7 +577,7 @@ def save_results_task(
         value=None,
     )
 
-    fused_results_csv_fpath.unlink()
+    fused_results_csv_fpath.unlink(missing_ok=True)
 
     df_to_save.to_csv(
         fused_results_csv_fpath,
@@ -581,4 +593,182 @@ def save_results_task(
     return {
         "gpkg_path": str(fused_results_gpkg_fpath),
         "csv_path": str(fused_results_csv_fpath),
+    }
+
+
+@task(name="Simplify Results", log_prints=True)
+def simplify_results_task(
+    final_aggregated_gdf: gpd.GeoDataFrame,  #
+) -> gpd.GeoDataFrame:
+    """
+    Creates a GeoDataFrame with a subset of measures from final aggregated GeoDataFrame.
+
+    Args:
+        final_aggregated_gdf: The fully joined GeoDataFrame.
+
+    Returns:
+        A GeoDataFrame containing the subset of measures.
+
+    Raises:
+        ValueError: If the input GeoDataFrame is invalid or empty, or if any required columns
+                    are not in the input 'final_aggregated_gdf'.
+    """
+    if (
+        not isinstance(final_aggregated_gdf, gpd.GeoDataFrame)
+        or final_aggregated_gdf.empty
+    ):
+        ValueError("'final_aggregated_gdf' must be a non-empty GeoDataFrame.")
+
+    selected_measure_aliases = dict(
+        e000_roadclass="openlr_roadclass",
+        e001_difference_sec="utah_redundancy_detour_seconds_diff",
+        e008_edge_betweenness_centrality="road_network_edge_betweenness_centrality",
+    )
+    selected_measure_aliases[final_aggregated_gdf.geometry.name] = "geometry"
+
+    selected_measure_cols = list(selected_measure_aliases.keys())
+
+    flood_impact_required_cols = [
+        "e004_nonfunctional_reason",
+        "e004_nonfunctional_frequency",
+    ]
+
+    required_cols = selected_measure_cols + flood_impact_required_cols
+
+    missing_cols = [
+        col for col in required_cols if col not in final_aggregated_gdf.columns
+    ]
+
+    if missing_cols:
+        raise ValueError(
+            f"The following columns are missing from 'final_aggregated_gdf': {missing_cols}"
+        )
+
+    simplified_results_gdf = final_aggregated_gdf[selected_measure_cols].copy()
+    simplified_results_gdf = simplified_results_gdf.rename(
+        columns=selected_measure_aliases
+    )
+
+    flooded_mask = final_aggregated_gdf["e004_nonfunctional_reason"] == "FLOODED"
+    simplified_results_gdf["flooding_vulnerability_frequency"] = final_aggregated_gdf[
+        "e004_nonfunctional_frequency"
+    ].where(flooded_mask)
+
+    simplified_results_gdf["transcom_flood_related_events_count"] = (
+        final_aggregated_gdf["e007_all_events_ids"].apply(
+            lambda event_ids: len(event_ids)
+            if isinstance(event_ids, (list, np.ndarray))
+            else None
+        )
+    )
+
+    return simplified_results_gdf
+
+
+@task(name="Save Simplified Results", log_prints=True)
+def save_simplified_results_task(
+    simplified_results_gdf: gpd.GeoDataFrame,  #
+    simplified_results_gpkg: PathLike,
+) -> Dict[str, str]:
+    """
+    Saves the final aggregated GeoDataFrame to GPKG and CSV formats.
+
+    Args:
+        final_aggregated_gdf: The fully joined GeoDataFrame.
+        output_dir: The directory to save the output files.
+        region_name: The name of the region for naming files.
+
+    Returns:
+        A dictionary containing the paths (as strings) to the saved GPKG and CSV files.
+
+    Raises:
+        ValueError: If the input GeoDataFrame is invalid or empty.
+        OSError: If the output directory cannot be created.
+        Exception: Propagates exceptions from file saving operations.
+    """
+    if (
+        not isinstance(simplified_results_gdf, gpd.GeoDataFrame)
+        or simplified_results_gdf.empty
+    ):
+        print("\n\n\n==========")
+        print(type(simplified_results_gdf))
+        print(simplified_results_gdf.empty)
+        print("==========\n\n\n")
+        raise ValueError("Cannot save empty or invalid final GeoDataFrame.")
+
+    simplified_results_gpkg_fpath = Path(simplified_results_gpkg)
+    simplified_results_csv_fpath = simplified_results_gpkg_fpath.with_suffix(".csv")
+
+    output_dir = simplified_results_gpkg_fpath.parent.resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    logger = get_run_logger()
+    logger.info(f"Saving final results to directory: {output_dir}")
+
+    # Prepare GDF for saving (reset index, create _id_)
+    gdf_to_save = simplified_results_gdf.copy()
+
+    # Reset index if it's the expected MultiIndex
+    if not isinstance(gdf_to_save.index, pd.MultiIndex) and gdf_to_save.index.names == [
+        "u",
+        "v",
+        "key",
+    ]:
+        raise ValueError(
+            "simplified_results_gdf does not have the expected (u, v, key) index"
+        )
+
+    gdf_to_save.sort_index(inplace=True)
+
+    if not gdf_to_save.index.is_unique:
+        raise ValueError(
+            "The (u, v, key) tuple does not uniquely identify simplified_results_gdf rows."
+        )
+
+    gdf_to_save.reset_index(inplace=True, allow_duplicates=False)
+
+    gdf_to_save.index = range(1, len(gdf_to_save) + 1)
+
+    gdf_to_save.rename_axis("_id_", axis=0, inplace=True)
+
+    # --- Save GPKG ---
+    # Let exceptions propagate from to_file
+    logger.info(f"Saving simplified GPKG to {simplified_results_gpkg_fpath}")
+
+    simplified_results_gpkg_fpath.unlink(missing_ok=True)
+
+    gdf_to_save.to_file(
+        filename=simplified_results_gpkg_fpath,
+        layer="road_network_resiliency_analysis",
+        engine="pyogrio",
+    )
+
+    os.chmod(simplified_results_gpkg_fpath, read_only_perms)
+
+    logger.info("Simplified GPKG saved successfully.")
+
+    # --- Save CSV ---
+    # Let exceptions propagate from to_csv
+    logger.info(f"Saving simplified CSV to {simplified_results_csv_fpath}")
+    df_to_save = gdf_to_save.drop(columns="geometry").replace(
+        to_replace=np.nan,
+        value=None,
+    )
+
+    simplified_results_csv_fpath.unlink(missing_ok=True)
+
+    df_to_save.to_csv(
+        simplified_results_csv_fpath,
+        index=True,
+        index_label=df_to_save.index.name,  # Use the actual index name (_id_ or other)
+        quoting=QUOTE_NONNUMERIC,
+    )
+
+    os.chmod(simplified_results_csv_fpath, read_only_perms)
+
+    logger.info("Simplified CSV saved successfully.")
+
+    return {
+        "gpkg_path": str(simplified_results_gpkg_fpath),
+        "csv_path": str(simplified_results_csv_fpath),
     }

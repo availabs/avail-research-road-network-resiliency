@@ -2,7 +2,6 @@
 
 import argparse
 import logging
-import os
 import pathlib
 import shutil
 
@@ -41,6 +40,8 @@ from tasks.core.prefect_tasks import (
     process_e008_task,
     process_e009_task,
     save_results_task,
+    save_simplified_results_task,
+    simplify_results_task,
 )
 from tasks.osm.tasks import (
     enrich_osm_task,
@@ -161,6 +162,10 @@ def main_flow(
     output_dir = THIS_DIR / "data" / region_name
     final_gpkg_path = output_dir / f"fused_experiments_output.{region_name}.gpkg"
 
+    simplified_results_gpkg_path = (
+        output_dir / f"simplified_road_network_analysis.{region_name}.gpkg"
+    )
+
     logger.info(f"Target output directory: {output_dir}")
     logger.info(f"Final aggregated GPKG path: {final_gpkg_path}")
 
@@ -257,32 +262,42 @@ def main_flow(
 
     logger.info("Joining completed.")
 
+    simplified_results_gdf_future = simplify_results_task.submit(
+        final_aggregated_gdf=final_aggregated_gdf_future
+    )
+
     # --- Save Final Results ---
     logger.info("Submitting save results task...")
 
     # Pass the final aggregated GDF and the target output GPKG path
-    save_future = save_results_task.submit(
+    save_full_future = save_results_task.submit(
         final_aggregated_gdf=final_aggregated_gdf_future,
         fused_results_gpkg=final_gpkg_path,  # Pass the constructed Path object
     )
 
-    final_output_paths = save_future.result()  # Wait for save
+    save_simplified_future = save_simplified_results_task.submit(
+        simplified_results_gdf=simplified_results_gdf_future,
+        simplified_results_gpkg=simplified_results_gpkg_path,
+    )
+
+    final_full_output_paths = save_full_future.result()  # Wait for save
+    save_simplified_output_paths = save_simplified_future.result()  # Wait for save
 
     logger.info("Saving completed.")
 
     # --- Log Final Output Paths ---
     logger.info("--- Workflow Finished Successfully ---")
-    if final_output_paths and final_output_paths.get("gpkg_path"):
-        logger.info(f"Aggregated GPKG: {final_output_paths['gpkg_path']}")
+    if final_full_output_paths and final_full_output_paths.get("gpkg_path"):
+        logger.info(f"Aggregated GPKG: {final_full_output_paths['gpkg_path']}")
     else:
         logger.error("Aggregated GPKG path not returned from save task.")
 
-    if final_output_paths and final_output_paths.get("csv_path"):
-        logger.info(f"Aggregated CSV: {final_output_paths['csv_path']}")
+    if final_full_output_paths and final_full_output_paths.get("csv_path"):
+        logger.info(f"Aggregated CSV: {final_full_output_paths['csv_path']}")
     else:
         logger.error("Aggregated CSV path not returned from save task.")
 
-    return final_output_paths
+    return final_full_output_paths, save_simplified_output_paths
 
 
 # --- Command-Line Interface ---

@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 def get_clipped_nysdot_bridges_data(
     nysdot_bridges_source: Union[str, pathlib.Path],
     buffered_region_gdf: gpd.GeoDataFrame,
-    layer_name: Optional[str] = None,
+    layer_name: str = "NYSDOT_Bridges",
     filter_out_rail_bridges: bool = True,
     rail_filter_column: str = "PrimaryOwn",
     rail_pattern: str = r".*RAILROAD.*",

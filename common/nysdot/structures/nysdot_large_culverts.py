@@ -1,6 +1,6 @@
 import logging
 import pathlib
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Union
 
 import geopandas as gpd
 import pyogrio
@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 def get_clipped_large_culvert_data(
     gis_source: Union[str, pathlib.Path],
     buffered_region_gdf: gpd.GeoDataFrame,
-    layer_name: Optional[str] = None,
+    layer_name: str = "NYSDOT_Large_Culverts",
     sjoin_predicate: str = "intersects",
 ) -> gpd.GeoDataFrame:
     # --- Input Validation ---

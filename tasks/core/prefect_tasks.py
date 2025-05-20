@@ -88,7 +88,9 @@ def process_base_edges_task(
 
 
 @task(log_prints=True)
-def process_e001_task(output_gpkg: PathLike) -> pd.DataFrame:
+def process_e001_task(
+    output_gpkg: PathLike,  #
+) -> pd.DataFrame:
     """
     Processes the output GPKG from experiment e001 (Redundancy).
     Asserts required columns exist and that the data is indexed by ['u','v','key'].
@@ -144,7 +146,10 @@ def process_e001_task(output_gpkg: PathLike) -> pd.DataFrame:
 
 
 @task(log_prints=True)
-def process_e004_task(output_gpkg: PathLike) -> pd.DataFrame:
+def process_e004_task(
+    output_gpkg: PathLike,  #
+    layer_name: str = "flood_impact",
+) -> pd.DataFrame:
     """
     Processes the output GPKG from experiment e004 (Flood Impact).
 
@@ -164,8 +169,6 @@ def process_e004_task(output_gpkg: PathLike) -> pd.DataFrame:
     """
     logger = get_run_logger()
     logger.info(f"Processing e004 GPKG: {output_gpkg}")
-
-    layer_name = "flood_impact"
 
     # Let FileNotFoundError propagate if file/layer missing
     df = gpd.read_file(
@@ -211,7 +214,7 @@ def process_e004_task(output_gpkg: PathLike) -> pd.DataFrame:
 @task(log_prints=True)
 def process_e007_task(
     output_gpkg: str,  #
-    output_layer: str,  #
+    output_layer: str = "aggregated_transcom_flood_events_data",  #
 ) -> pd.DataFrame:
     """
     Processes the output GPKG from experiment e007 (TRANSCOM Events).
@@ -277,7 +280,10 @@ def process_e007_task(
 
 
 @task(log_prints=True)
-def process_e008_task(output_gpkg: str) -> pd.DataFrame:
+def process_e008_task(
+    output_gpkg: str,  #
+    output_layer: str = "roads_with_centrality_metrics",
+) -> pd.DataFrame:
     """
     Processes the output GPKG from experiment e008 (Network Metrics).
     Reads 'roads_with_centrality_metrics' layer. Asserts required columns exist, sets index.
@@ -292,12 +298,18 @@ def process_e008_task(output_gpkg: str) -> pd.DataFrame:
     """
     logger = get_run_logger()
     logger.info(f"Processing e008 GPKG: {output_gpkg}")
-    layer_name = "roads_with_centrality_metrics"
 
     # Let FileNotFoundError propagate
-    df = gpd.read_file(filename=output_gpkg, layer=layer_name, engine="pyogrio")
+    df = gpd.read_file(
+        filename=output_gpkg,  #
+        layer=output_layer,
+        engine="pyogrio",
+    )
 
-    assert not df.empty, f"e008 GPKG {output_gpkg} (layer: {layer_name}) loaded empty."
+    if df.empty:
+        raise ValueError(
+            f"e008 GPKG {output_gpkg} (layer: {output_layer}) loaded empty."
+        )
 
     if "geometry" in df.columns:
         df = df.drop(columns=["geometry"])
@@ -339,7 +351,10 @@ def process_e008_task(output_gpkg: str) -> pd.DataFrame:
 
 
 @task(log_prints=True)
-def process_e009_task(output_gpkg: str) -> pd.DataFrame:
+def process_e009_task(
+    output_gpkg: str,  #
+    output_layer: str = "osm_edges_with_ris_meta",
+) -> pd.DataFrame:
     """
     Processes the output GPKG from experiment e009 (RIS Conflation).
     Reads 'osm_edges_with_ris_meta' layer. Asserts required columns exist, sets index.
@@ -354,17 +369,16 @@ def process_e009_task(output_gpkg: str) -> pd.DataFrame:
     """
     logger = get_run_logger()
     logger.info(f"Processing e009 GPKG: {output_gpkg}")
-    layer_name = "osm_edges_with_ris_meta"
 
     # Let FileNotFoundError propagate
     df = gpd.read_file(
         output_gpkg,  #
-        layer=layer_name,
+        layer=output_layer,
         engine="pyogrio",
     )
 
     assert not df.empty, (
-        f"e009 GPKG {output_gpkg} (layer: {layer_name}) loaded empty. Returning empty DF."
+        f"e009 GPKG {output_gpkg} (layer: {output_layer}) loaded empty. Returning empty DF."
     )
 
     # Drop optional columns if they exist

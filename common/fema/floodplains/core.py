@@ -160,13 +160,16 @@ def get_highest_ranked_flood_zone(flood_zone_pairs):
     return highest_ranked_zone
 
 
-# Make sure that for every fld_zone, there is an entry in the flood_zone_risk_hierarchy where zone_subty is None.
-assert all(
+# Validate  the flood_zone_risk_hierarchy
+if not all(
     [
         (fld_zone, None) in flood_zone_risk_hierarchy
         for fld_zone, _ in flood_zone_risk_hierarchy.keys()
     ]
-)
+):
+    raise ValueError(
+        "For every fld_zone in the flood_zone_risk_hierarchy, there MUST be an entry where zone_subty is None."
+    )
 
 
 def convert_len_value_to_meters(len_value, len_unit):
@@ -307,7 +310,7 @@ def convert_velocity_value_to_meters_per_second(velocity, vel_unit):
 
 def _assign_flood_risk_level(
     floodplains_gdf: gpd.GeoDataFrame,  #
-) -> gpd.GeoDataFrame:
+):
     """
     NOTE: Mutates the input floodplains_gdf
 
@@ -325,9 +328,10 @@ def _assign_flood_risk_level(
         if (row.fld_zone, row.zone_subty) not in flood_zone_risk_hierarchy
     }
 
-    assert not unexpected_pairs, (
-        f"Encountered unexpected (fld_zone, zone_subty) pairs: ({unexpected_pairs})"
-    )
+    if unexpected_pairs:
+        raise ValueError(
+            f"Encountered unexpected (fld_zone, zone_subty) pairs: ({unexpected_pairs})"
+        )
 
     floodplains_gdf["_flood_risk_level_"] = [
         flood_zone_risk_hierarchy[(row.fld_zone, row.zone_subty)]

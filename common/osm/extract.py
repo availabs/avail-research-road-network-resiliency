@@ -5,6 +5,7 @@ import os
 import re
 import subprocess
 from os import PathLike
+from pathlib import Path
 from typing import Optional
 
 import shapely
@@ -21,8 +22,13 @@ this_dir = os.path.dirname(os.path.abspath(__file__))
 OSMOSIS = os.path.join(this_dir, "../../lib/osmosis/latest/bin/osmosis")
 
 DEFAULT_OSM_EXTRACT_BUFFER_DIST_MI = 10
-DEFAULT_OSM_EXTRACTS_DIR = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "../../data/processed/osm")
+DEFAULT_OSM_EXTRACTS_DIR = Path(
+    os.path.abspath(  #
+        os.path.join(  #
+            os.path.dirname(__file__),  #
+            "../../data/processed/osm",
+        )
+    )
 )
 
 
@@ -89,6 +95,9 @@ def output_osmosis_filter_poly(
         If the unified geometry is not a polygon or multipolygon.
     """
     # Combine all geometries into a single geometry (union)
+    if os.path.exists(out_filename):
+        return out_filename
+
     union_geom = shapely.ops.unary_union(
         region_gdf.to_crs(
             "EPSG:4326",  #

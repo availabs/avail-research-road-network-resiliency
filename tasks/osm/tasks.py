@@ -2,11 +2,18 @@ import argparse
 import logging
 import os
 from os import PathLike
-from typing import Any, Dict, Optional
+from pathlib import Path
+from typing import Optional
 
+import geopandas as gpd
 from prefect import get_run_logger, task
 
-from common.osm.enrich import create_enriched_osmnx_graph_for_region
+from common.osm.enrich import (
+    EnrichedOsmNetworkDataWithFullMetadata,
+    create_bridge_spans_gdf,
+    create_enriched_osmnx_graph_for_region,
+    create_nonbridge_spans_gdf,
+)
 from common.osm.extract import (
     DEFAULT_OSM_EXTRACT_BUFFER_DIST_MI,
     DEFAULT_OSM_EXTRACTS_DIR,
@@ -21,7 +28,7 @@ def extract_osm_region_road_network_task(
     buffer_dist_mi: Optional[int] = DEFAULT_OSM_EXTRACT_BUFFER_DIST_MI,
     output_dir: Optional[PathLike] = DEFAULT_OSM_EXTRACTS_DIR,
     clean: bool = False,
-) -> Dict[str, Any]:
+) -> Path:
     """
     Loads and enriches OSM data. Returns dict like 'd' in notebook.
     Keys should include 'region_name', 'edges_gdf', 'buffered_region_gdf'.
@@ -44,13 +51,15 @@ def extract_osm_region_road_network_task(
 
     logger.info(f"OSM PBF extract creation complete for GEOID={geoid}")
 
-    return osm_pbf
+    osm_pbf_path = Path(osm_pbf)
+
+    return osm_pbf_path
 
 
 @task(name="Enrich OSM Data")
 def enrich_osm_task(
     osm_pbf: PathLike,  #
-) -> Dict[str, Any]:
+) -> EnrichedOsmNetworkDataWithFullMetadata:
     """
     Prefect task to create or load an enriched OSMnx graph.
 
@@ -103,6 +112,74 @@ def enrich_osm_task(
     except Exception as e:
         logger.error(f"Failed to create/load graph from {osm_pbf}: {e}", exc_info=True)
         raise
+
+
+@task(name="Create bridge spans GeoDataFrame")
+def create_bridge_spans_gdf_task(edges_gdf: gpd.GeoDataFrame):
+    """
+    Prefect task to create a GeoDataFrame of bridge spans in the edges_gdf
+
+    Wraps the common.osm.enrich.create_bridge_spans_gdf function.
+
+    Parameters:
+        edges_gdf (gpd.GeoDataFrame): GeoDataFrame of edges from `clean`, with columns:
+            - geometry: LineString representing the edge.
+            - osm_way_along_info: List of dicts with `start_coord_idx`, `end_coord_idx`,
+              `bridge_tag`, `osmid`, `osm_nodes`, etc.
+            - u, v, key: Edge identifiers.
+
+    Returns:
+        gpd.GeoDataFrame: A new GeoDataFrame with one row per bridge span, containing:
+            - geometry: LineString of the bridge span segment.
+            - start_coord_idx, end_coord_idx: Indices in the parent edge’s geometry.
+            - start_ratio_along, end_ratio_along: Ratios along the parent edge’s length.
+            - osmids: List of OSM way IDs in the span.
+            - osm_nodes: List of OSM node IDs along the span.
+            - u, v, key: Parent edge identifiers (in the index with span_idx).
+    """
+    logger = get_run_logger()
+
+    logger.debug("Starting OSM create_bridge_spans_gdf")
+
+    nonbridge_spans_gdf = create_bridge_spans_gdf(edges_gdf=edges_gdf)
+
+    logger.debug("Created OSM bridge spans")
+
+    return nonbridge_spans_gdf
+
+
+@task(name="Create nonbridge spans GeoDataFrame")
+def create_nonbridge_spans_gdf_task(edges_gdf: gpd.GeoDataFrame):
+    """
+    Prefect task to create a GeoDataFrame of nonbridge spans in the edges_gdf
+
+    Wraps the common.osm.enrich.create_nonbridge_spans_gdf function.
+
+    Parameters:
+        edges_gdf (gpd.GeoDataFrame): GeoDataFrame of edges from `clean`, with columns:
+            - geometry: LineString representing the edge.
+            - osm_way_along_info: List of dicts with `start_coord_idx`, `end_coord_idx`,
+              `bridge_tag`, `osmid`, `osm_nodes`, etc.
+            - u, v, key: Edge identifiers.
+
+    Returns:
+        gpd.GeoDataFrame: A new GeoDataFrame with one row per non-bridge span, containing:
+            - geometry: LineString of the non-bridge segment.
+            - start_coord_idx, end_coord_idx: Indices in the parent edge’s geometry.
+            - start_ratio_along, end_ratio_along: Ratios along the parent edge’s length.
+            - osmids: List of OSM way IDs in the span.
+            - osm_nodes: List of OSM node IDs along the span.
+            - u, v, key: Parent edge identifiers (in the index with span_idx).
+    """
+    logger = get_run_logger()
+
+    logger.debug("Starting OSM create_nonbridge_spans_gdf")
+
+    nonbridge_spans_gdf = create_nonbridge_spans_gdf(edges_gdf=edges_gdf)
+
+    logger.debug("Created OSM nonbridge spans")
+
+    return nonbridge_spans_gdf
 
 
 # --- Command-Line Interface ---

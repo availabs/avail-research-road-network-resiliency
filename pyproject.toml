@@ -18,6 +18,7 @@ dependencies = [
     "libpysal>=4.13.0",
     "matplotlib>=3.10.0",
     "nbformat>=5.10.4",
+    "networkit>=11.1.post1",
     "networkx>=3.4.2",
     "numpy>=2.2.2",
     "osmnx>=2.0.1",

@@ -237,6 +237,7 @@ dependencies = [
     { name = "libpysal" },
     { name = "matplotlib" },
     { name = "nbformat" },
+    { name = "networkit" },
     { name = "networkx" },
     { name = "numpy" },
     { name = "osmnx" },
@@ -273,6 +274,7 @@ requires-dist = [
     { name = "libpysal", specifier = ">=4.13.0" },
     { name = "matplotlib", specifier = ">=3.10.0" },
     { name = "nbformat", specifier = ">=5.10.4" },
+    { name = "networkit", specifier = ">=11.1.post1" },
     { name = "networkx", specifier = ">=3.4.2" },
     { name = "numpy", specifier = ">=2.2.2" },
     { name = "osmnx", specifier = ">=2.0.1" },
@@ -1514,6 +1516,19 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/83/f8/51569ac65d696c8ecbee95938f89d4abf00f47d58d48f6fbabfe8f0baefe/nest_asyncio-1.6.0.tar.gz", hash = "sha256:6f172d5449aca15afd6c646851f4e31e02c598d553a667e38cafa997cfec55fe", size = 7418, upload_time = "2024-01-21T14:25:19.227Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a0/c4/c2971a3ba4c6103a3d10c4b0f24f461ddc027f0f09763220cf35ca1401b3/nest_asyncio-1.6.0-py3-none-any.whl", hash = "sha256:87af6efd6b5e897c81050477ef65c62e2b2f35d51703cae01aff2905b1852e1c", size = 5195, upload_time = "2024-01-21T14:25:17.223Z" },
+]
+
+[[package]]
+name = "networkit"
+version = "11.1.post1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "scipy" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/92/b6/30b6f1c411a01dd3878ab85ba09ee798d61a110eb1094c9d645a50bdbbda/networkit-11.1.post1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:0e477bd65f9f8b91d1bfec130ea8aa089f4010dc4898bb246a7d3cb312ae0c65", size = 10909917, upload_time = "2025-03-17T14:14:56.173Z" },
+    { url = "https://files.pythonhosted.org/packages/bc/e0/9366add8e566b4b734799d02002f5c77883a4218570d2d197ea46ecdb113/networkit-11.1.post1-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:b78536455810d277be07e9b16790f992325be0ffbf0f186ca8d4c74d03c455a1", size = 10891382, upload_time = "2025-03-17T14:15:26.428Z" },
 ]
 
 [[package]]

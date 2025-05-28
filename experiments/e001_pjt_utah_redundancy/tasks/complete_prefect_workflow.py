@@ -190,7 +190,7 @@ def export_results_task(
 
 @flow
 def redundancy_analysis_flow(
-    osm_pbf: str,  #
+    osm_pbf: PathLike,  #
     clean: bool = False,
     verbose: bool = False,
 ) -> None:

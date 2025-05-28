@@ -19,15 +19,15 @@ from prefect import flow, get_run_logger, task
 # Import refactored functions and necessary types/classes from core_logic
 from experiments.e004_pjt_flood_impact.src.core_logic import (
     DEFAULT_QUADRAT_WIDTH,
+    FloodImpactAnalysisStrategy,
     FloodingImpactInfo,
-    InitialImpactData,
     IntegrityHashKey,
     add_impact_columns_to_gdf,
     calculate_highest_road_risk_for_nonbridge_spans,
     flood_impact_analysis_orchestrator,
     identify_impacted_edges,
-    initialize_flood_impact_data,
     perform_spatial_join_with_floodplains,
+    validate_floodplains_gdf,
 )
 from tasks.fema.floodplains import get_clipped_floodplain_data_task
 from tasks.osm import enrich_osm_task
@@ -38,41 +38,33 @@ experiment_data_dir = experiment_root / "data"
 # --- Task Definitions ---
 
 
-# Task wrapping the refactored initialization function
-@task(name="Initialize Flood Impact Data")
-def initialize_flood_impact_data_task(
-    osmnx_simplified_g: nx.MultiDiGraph,
+# Task wrapping the validate_floodplains_gdf highest risk calculation function
+@task(name="Validate Floodplains GeoDataFrame")
+def validate_floodplains_gdf_task(
     floodplains_gdf: gpd.GeoDataFrame,
-) -> InitialImpactData:
+) -> gpd.GeoDataFrame:
     """
-    Prefect task wrapper for core_logic.initialize_flood_impact_data.
-    Initializes GDFs and graph, calculates initial integrity hashes, and clears caches.
+    Prefect task wrapper for core_logic.validate_floodplains_gdf_task.
 
     Args:
-        osmnx_simplified_g: The simplified osmnx MultiDiGraph for the region.
-        floodplains_gdf: GeoDataFrame of floodplain polygons including the
-                         '_flood_risk_level_' column.
+        floodplains_gdf: GeoDataFrame of floodplain polygons.
 
     Returns:
-        An InitialImpactData dataclass instance containing the initial data
-        and a mapping of their integrity hashes.
+        A pandas Series mapping original non-bridge span int_loc to its highest risk level.
     """
     logger = get_run_logger()
-    logger.info("Task: Initializing flood impact data...")
+    logger.info("Task: Validating Floodplains GeoDataFrame...")
     try:
-        initial_data = initialize_flood_impact_data(
-            osmnx_simplified_g=osmnx_simplified_g,
-            floodplains_gdf=floodplains_gdf,
-        )
-        logger.info("Task: Flood impact data initialized successfully.")
-
-        return initial_data
+        validated_gdf = validate_floodplains_gdf(floodplains_gdf=floodplains_gdf)
+        logger.info("Task: Validated Floodplains GeoDataFrame.")
     except Exception as e:
         logger.error(
-            f"Task Error: Failed during flood impact data initialization: {e}",
+            f"Task Error: Failed to validate the floodplains GeoDataFrame: {e}",
             exc_info=True,
         )
         raise
+
+    return validated_gdf
 
 
 # Task wrapping the refactored spatial join function
@@ -80,9 +72,8 @@ def initialize_flood_impact_data_task(
 def perform_spatial_join_task(
     nonbridge_spans_gdf: gpd.GeoDataFrame,
     floodplains_gdf: gpd.GeoDataFrame,
-    integrity_hashes: Mapping[IntegrityHashKey, int],
     quadrat_width: float = DEFAULT_QUADRAT_WIDTH,
-) -> Tuple[gpd.GeoDataFrame, int]:  # Return mandatory hash
+) -> gpd.GeoDataFrame:  # Return mandatory hash
     """
     Prefect task wrapper for core_logic.perform_spatial_join_with_floodplains.
     Performs spatial join and returns the resulting GDF and its hash.
@@ -91,7 +82,6 @@ def perform_spatial_join_task(
     Args:
         nonbridge_spans_gdf: GeoDataFrame of non-bridge spans.
         floodplains_gdf: GeoDataFrame of floodplain polygons.
-        integrity_hashes: Mapping containing expected integrity hashes for inputs.
         quadrat_width: Width for subdividing the spatial index.
 
     Returns:
@@ -104,21 +94,13 @@ def perform_spatial_join_task(
         "Task: Performing spatial join between non-bridge spans and floodplains..."
     )
     try:
-        # Pass integrity_hashes directly; core logic function expects Optional but here we know it's provided
-        join_gdf, join_gdf_integrity_hash_opt = perform_spatial_join_with_floodplains(
+        join_gdf = perform_spatial_join_with_floodplains(
             nonbridge_spans_gdf=nonbridge_spans_gdf,
             floodplains_gdf=floodplains_gdf,
             quadrat_width=quadrat_width,
-            integrity_hashes=integrity_hashes,
         )
 
-        join_gdf_integrity_hash = join_gdf_integrity_hash_opt
-
-        logger.info(
-            f"Task: Spatial join complete. Found {len(join_gdf)} intersections."
-        )
-
-        return join_gdf, join_gdf_integrity_hash
+        return join_gdf
     except Exception as e:
         logger.error(f"Task Error: Failed during spatial join: {e}", exc_info=True)
         raise
@@ -128,7 +110,6 @@ def perform_spatial_join_task(
 @task(name="Calculate Highest Road Risk")
 def calculate_highest_road_risk_for_nonbridge_spans_task(
     nonbridge_spans_floodplains_join_gdf: gpd.GeoDataFrame,
-    integrity_hashes: Mapping[IntegrityHashKey, int],
 ) -> pd.Series:
     """
     Prefect task wrapper for core_logic.calculate_highest_road_risk.
@@ -137,7 +118,6 @@ def calculate_highest_road_risk_for_nonbridge_spans_task(
 
     Args:
         join_gdf: GDF from the spatial join step.
-        integrity_hashes: Mapping containing expected integrity hashes (must include JOIN_GDF).
 
     Returns:
         A pandas Series mapping original non-bridge span int_loc to its highest risk level.
@@ -147,7 +127,6 @@ def calculate_highest_road_risk_for_nonbridge_spans_task(
     try:
         highest_risk_series = calculate_highest_road_risk_for_nonbridge_spans(
             nonbridge_spans_floodplains_join_gdf=nonbridge_spans_floodplains_join_gdf,
-            integrity_hashes=integrity_hashes,
         )
         logger.info(
             f"Task: Highest risk calculation complete for {len(highest_risk_series)} spans."
@@ -167,7 +146,6 @@ def identify_impacted_edges_task(
     nonbridge_spans_gdf: gpd.GeoDataFrame,
     bridge_spans_gdf: gpd.GeoDataFrame,
     nonbridge_spans_int_loc_to_highest_flood_risk: pd.Series,
-    integrity_hashes: Mapping[IntegrityHashKey, int],
 ) -> Tuple[
     Dict[Tuple[int, int, int], FloodingImpactInfo], Dict[Tuple[int, int, int], int]
 ]:
@@ -181,7 +159,6 @@ def identify_impacted_edges_task(
         nonbridge_spans_gdf: GeoDataFrame of non-bridge spans.
         bridge_spans_gdf: GeoDataFrame of bridge spans.
         highest_risk_series: Series mapping non-bridge span int_loc to risk level.
-        integrity_hashes: Mapping containing expected integrity hashes for inputs.
 
     Returns:
         A tuple containing the nonfunctional_edges and isolated_edges dictionaries.
@@ -194,7 +171,6 @@ def identify_impacted_edges_task(
             nonbridge_spans_gdf=nonbridge_spans_gdf,
             bridge_spans_gdf=bridge_spans_gdf,
             nonbridge_spans_int_loc_to_highest_flood_risk=nonbridge_spans_int_loc_to_highest_flood_risk,
-            integrity_hashes=integrity_hashes,
         )
 
         logger.info(
@@ -213,12 +189,11 @@ def identify_impacted_edges_task(
 @task(name="Add Impact Columns to GDF")
 def add_impact_columns_task(
     roads_gdf: gpd.GeoDataFrame,
-    nonfunctional_edges_to_reason_and_risk: Dict[
-        Tuple[int, int, int], FloodingImpactInfo
+    impacted_edges: Tuple[
+        Dict[Tuple[int, int, int], FloodingImpactInfo],
+        Dict[Tuple[int, int, int], int],
     ],
-    isolated_edges_to_risk_level: Dict[Tuple[int, int, int], int],
-    integrity_hashes: Mapping[IntegrityHashKey, int],
-) -> Tuple[gpd.GeoDataFrame, int]:  # Return mandatory hash
+) -> gpd.GeoDataFrame:  # Return mandatory hash
     """
     Prefect task wrapper for core_logic.add_impact_columns_to_gdf.
     Adds columns detailing flood impacts to the main roads GeoDataFrame.
@@ -226,30 +201,27 @@ def add_impact_columns_task(
 
     Args:
         roads_gdf: The original GeoDataFrame of all road edges.
-        nonfunctional_edges: Dict mapping nonfunctional edges to impact info.
-        isolated_edges: Dict mapping isolated edges to risk level.
-        integrity_hashes: Mapping containing expected integrity hash for roads_gdf.
+        impacted_edges: Tuple that contains:
+            nonfunctional_edges_to_reason_and_risk: Dict mapping nonfunctional edges
+                to their impact reason and risk level.
+            isolated_edges_to_risk_level: Dict mapping isolated edges to the risk
+                level at which they became isolated.
 
     Returns:
         A tuple containing:
             - final_impact_gdf: The GeoDataFrame with added impact columns.
-            - final_impact_gdf_integrity_hash: Hash of the final GDF index.
     """
     logger = get_run_logger()
 
     logger.info("Task: Adding impact columns to final GeoDataFrame...")
     try:
-        final_gdf, final_gdf_hash_opt = add_impact_columns_to_gdf(
-            roads_gdf=roads_gdf,
-            nonfunctional_edges_to_reason_and_risk=nonfunctional_edges_to_reason_and_risk,
-            isolated_edges_to_risk_level=isolated_edges_to_risk_level,
-            integrity_hashes=integrity_hashes,
+        final_gdf = add_impact_columns_to_gdf(
+            roads_gdf=roads_gdf,  #
+            impacted_edges=impacted_edges,
         )
 
-        final_gdf_hash = final_gdf_hash_opt
-
         logger.info("Task: Impact columns added successfully.")
-        return final_gdf, final_gdf_hash
+        return final_gdf
     except Exception as e:
         logger.error(f"Task Error: Failed adding impact columns: {e}", exc_info=True)
         raise
@@ -317,13 +289,55 @@ def save_flood_impact_gdf_task(
         raise  # Re-raise the original exception
 
 
+@task(name="Add Impact Columns to GDF")
+def flood_impact_analysis_orchestrator_task(
+    osmnx_simplified_g: nx.MultiDiGraph,  #
+    floodplains_gdf: gpd.GeoDataFrame,
+) -> gpd.GeoDataFrame:  # Return mandatory hash
+    """
+    Prefect task wrapper for core_logic.flood_impact_analysis_orchestrator,
+    which Orchestrates the flood impact analysis pipeline.
+
+    Args:
+        osm_simplified_g: The original OSMnx simplified MultiDiGraph of the OSM road network.
+        floodplains_gdf: GeoDataFrame of floodplain polygons.
+
+    Returns:
+        A GeoDataFrame containing the flood impact analysis results.
+    """
+    logger = get_run_logger()
+
+    logger.info("Task: Adding impact columns to final GeoDataFrame...")
+    try:
+        strategy = FloodImpactAnalysisStrategy(
+            perform_spatial_join_task=perform_spatial_join_task.submit,
+            calculate_highest_road_risk_for_nonbridge_spans_task=calculate_highest_road_risk_for_nonbridge_spans_task.submit,
+            identify_impacted_edges_task=identify_impacted_edges_task.submit,
+            add_impact_columns_task=add_impact_columns_task.submit,
+            validate_floodplains_gdf_task=validate_floodplains_gdf_task.submit,
+        )
+
+        final_gdf = flood_impact_analysis_orchestrator(
+            osmnx_simplified_g=osmnx_simplified_g,
+            floodplains_gdf=floodplains_gdf,
+            strategy=strategy,
+        )
+
+        logger.info("Task: Impact columns added successfully.")
+
+        return final_gdf
+    except Exception as e:
+        logger.error(f"Task Error: Failed adding impact columns: {e}", exc_info=True)
+        raise
+
+
 # --- Flow Definition ---
 
 
 @flow(name="Flood Impact Analysis Workflow")
 def flood_impact_analysis_flow(
-    osm_pbf: str,
-    floodplains_gpkg: str,
+    osm_pbf: PathLike,
+    floodplains_path: PathLike,
     clean: bool = False,
     verbose: bool = False,
 ):
@@ -343,7 +357,7 @@ def flood_impact_analysis_flow(
 
     logger.info("--- Starting Flood Impact Analysis Workflow ---")
     logger.info(f"OSM Input: {osm_pbf}")
-    logger.info(f"Floodplains Input: {floodplains_gpkg}")
+    logger.info(f"Floodplains Input: {floodplains_path}")
     logger.info(f"Clean Run: {clean}")
     logger.info(f"Verbose Logging: {verbose}")
     logger.info("Integrity checks are always enabled.")
@@ -353,9 +367,7 @@ def flood_impact_analysis_flow(
     logger.info("Running task: Enrich OSM data...")
     enriched_osm = enrich_osm_task(osm_pbf=osm_pbf)  # Direct call
 
-    # Validate and extract OSM enrichment results
-    if not enriched_osm:
-        raise ValueError("OSM enrichment task did not return expected results.")
+    osm_simplified_g = enriched_osm["g"]
     buffered_region_gdf = enriched_osm["buffered_region_gdf"]
     region_name = enriched_osm["region_name"]
 
@@ -398,27 +410,27 @@ def flood_impact_analysis_flow(
         logger.info("Output file does not exist. Proceeding with analysis.")
 
     floodplains_gdf_future = get_clipped_floodplain_data_task.submit(  # Direct call
-        floodplains_gpkg_path=floodplains_gpkg,
+        floodplains_gpkg_path=floodplains_path,
         buffered_region_gdf=buffered_region_gdf,
     )
 
     # Validate clipped floodplains
     # --- Step 7: Add Impact Columns ---
-    final_gdf, _ = flood_impact_analysis_orchestrator(
-        enriched_osm=enriched_osm,
+    # FIXME: Is this isn't an anti-pattern, it should be.
+    final_gdf_future_future = flood_impact_analysis_orchestrator_task.submit(
+        osmnx_simplified_g=osm_simplified_g,
         floodplains_gdf=floodplains_gdf_future,
-        initialize_flood_impact_data_task=initialize_flood_impact_data_task,
-        perform_spatial_join_task=perform_spatial_join_task.submit,
-        calculate_highest_road_risk_for_nonbridge_spans_task=calculate_highest_road_risk_for_nonbridge_spans_task.submit,
-        identify_impacted_edges_task=identify_impacted_edges_task.submit,
-        add_impact_columns_task=add_impact_columns_task.submit,
     )
 
+    final_gdf_future = final_gdf_future_future.result()
+
     # --- Step 8: Save Output ---
-    saved_gpkg_path = save_flood_impact_gdf_task(
-        gdf=final_gdf,
+    saved_gpkg_path_future = save_flood_impact_gdf_task.submit(
+        gdf=final_gdf_future,
         output_path=output_gpkg_path,  # Pass the full path
     )
+
+    saved_gpkg_path = saved_gpkg_path_future.result()
 
     assert str(saved_gpkg_path) == str(output_gpkg_path)
 
@@ -445,9 +457,9 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "--floodplains-gpkg",
+        "--floodplains-path",
         required=True,
-        help="Path to the input Floodplains GeoPackage file.",
+        help="Path to the input Floodplains GIS file.",
     )
 
     parser.add_argument(
@@ -470,7 +482,7 @@ if __name__ == "__main__":
     try:
         final_output_path = flood_impact_analysis_flow(
             osm_pbf=args.osm_pbf,
-            floodplains_gpkg=args.floodplains_gpkg,
+            floodplains_path=args.floodplains_path,
             clean=args.clean,
             verbose=args.verbose,
         )

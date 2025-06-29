@@ -1,0 +1,29 @@
+Column Name,Data Type,Description
+u,Integer64,The unique identifier for the road segment's starting node.
+v,Integer64,The unique identifier for the road segment's ending node.
+key,Integer64,The key for the road segment edge.
+openlr_roadclass,Integer64,The OpenLR road class classification.
+road_name,String,The common name of the road.
+from_name,String,The name of the intersection at the starting node.
+to_name,String,The name of the intersection at the ending node.
+length_mi,Real,The length of the road segment in miles.
+utah_redundancy_detour_seconds_diff,Real,The additional travel time (in seconds) for a detour. Sourced from E001.
+intra_cbsa_edge_betweenness_rank,Integer64,The segment's centrality rank within its specific CBSA. Sourced from E008.
+all_cbsa_edge_betweenness_rank,Integer64,The segment's centrality rank across all CBSAs. Sourced from E008.
+e009_ris_counts_aadt,Real,Annual Average Daily Traffic. Sourced from E009.
+e009_ris_counts_su_aadt,Real,Single-Unit truck Annual Average Daily Traffic. Sourced from E009.
+e009_ris_counts_cu_aadt,Real,Combination-Unit truck Annual Average Daily Traffic. Sourced from E009.
+scores_redundancy_normalized,Real,Normalized redundancy score (0-10 scale).
+scores_redundancy_bin_weight,Integer,Binned redundancy score (1-5).
+scores_centrality_normalized,Real,The normalized network centrality score.
+scores_flood_risk,Integer,Calculated flood risk score.
+scores_culvert_risk,Integer,Binary risk for large culvert presence.
+scores_hydrography_risk,Integer,Binary risk for crossing a water flowline.
+scores_criticality,Real,Composite criticality score.
+scores_criticality_v2,Real,Alternate composite criticality score.
+scores_total_risk,Integer,Composite risk score.
+scores_resiliency,Real,Final inverse resilience score.
+scores_resiliency_v2,Real,Alternate final inverse resilience score.
+flooding_vulnerability_frequency,String,"If the segment is vulnerable to flooding, this indicates the frequency ('100 YEAR', '500 YEAR'). Sourced from E004."
+crosses_national_hydrography_dataset_flowline,Integer(Boolean),A boolean (true/false) flag indicating if the segment crosses a water flowline. Sourced from E010.
+geom,Geometry,The geometry of the road segment.

@@ -1,0 +1,52 @@
+Column Name,Data Type,Description
+u,Integer64,The starting node identifier for the road segment from the OSMnx graph.
+v,Integer64,The ending node identifier for the road segment from the OSMnx graph.
+key,Integer64,The key differentiating multiple edges between the same u and v nodes.
+e000_access,String,OSM tag describing access restrictions for the road segment.
+e000_highway,String,"The primary OSM highway classification tag (e.g., motorway, primary, residential)."
+e000_lanes,String,The number of traffic lanes on the road segment.
+e000_maxspeed,String,The posted speed limit for the road segment.
+e000_name,String,The official or common name of the road.
+e000_oneway,String,Indicates if the road segment is one-way.
+e000_surface,String,"The surface material of the road (e.g., asphalt, gravel)."
+e000_length_mi,Real,The length of the road segment in miles.
+e000_road_name,String,A cleaned-up version of the road name.
+e000_from_name,String,The name of the intersection at the starting node (u).
+e000_to_name,String,The name of the intersection at the ending node (v).
+e000_travel_time,Real,Estimated travel time in seconds for the road segment based on length and speed limit.
+e001_difference_sec,Real,The additional travel time (in seconds) incurred by taking a detour if this segment were closed.
+e004_nonfunctional_reason,String,"Reason the segment is unusable in a flood scenario (e.g., 'FLOODED', 'BRIDGE_FUNCTIONALLY_DISCONNECTED')."
+e004_nonfunctional_risk_level,Integer64,The numeric FEMA risk level causing the non-functionality.
+e004_nonfunctional_frequency,String,The flood frequency ('100 YEAR' or '500 YEAR') associated with the non-functionality.
+e004_isolated_edge_risk_level,Real,The numeric FEMA risk level at which a non-flooded segment becomes isolated.
+e004_isolated_edge_frequency,String,The flood frequency ('100 YEAR' or '500 YEAR') causing the isolation.
+e007_all_events_ids,String,A list of unique TRANSCOM event IDs that affected this segment.
+e007_all_events_count,Integer64,The total count of unique TRANSCOM events on this segment.
+e007_all_incidents_count,Integer64,"The count of distinct, continuous time periods (islands) of disruption on this segment."
+e007_all_incidents_total_duration_hours,Real,"Total duration in hours of all disruptive incidents, with overlapping times merged."
+e007_road_closed_incidents_count,Integer64,"Count of distinct ""road closed"" incidents."
+e007_road_closed_total_duration_hours,Real,"Total duration in hours of ""road closed"" incidents."
+e007_road_flooded_incidents_count,Integer64,"Count of distinct ""road flooded"" incidents."
+e007_road_flooded_total_duration_hours,Real,"Total duration in hours of ""road flooded"" incidents."
+e008_cbsa_geoid,String,The GEOID of the Core-Based Statistical Area (CBSA) for which centrality was calculated.
+e008_cbsa_name,String,The name of the CBSA.
+e008_cbsa_edge_betweenness_normalized,Real,"The edge betweenness centrality score, normalized within its home CBSA."
+e008_all_cbsa_edge_betweenness_rank_normalized,Real,"The rank of the centrality score, normalized across all CBSAs."
+e009_ris_counts_aadt,Real,Annual Average Daily Traffic from NYSDOT RIS.
+e009_ris_counts_su_aadt,Real,Single-Unit truck Annual Average Daily Traffic from NYSDOT RIS.
+e009_ris_counts_cu_aadt,Real,Combination-Unit truck Annual Average Daily Traffic from NYSDOT RIS.
+e009_ris_large_culvert_cin,String,The Culvert Identification Number (CIN) if a large culvert from NYSDOT RIS is on this segment.
+e010_num_total_intersection_points,Integer64,The total number of times the road segment intersects with a National Hydrography Dataset flowline.
+scores_redundancy_normalized,Real,Normalized redundancy score (0-10 scale). A higher score indicates lower redundancy (worse).
+scores_redundancy_bin_weight,Integer,Binned redundancy score (1-5). A higher score indicates lower redundancy (worse).
+scores_flood_risk,Integer,"Calculated flood risk score based on FEMA data (100-year=2, 500-year=1)."
+scores_flooding_events_risk,Integer,"Calculated risk score from historical TRANSCOM flooding events (1 event=1, >1 event=2)."
+scores_centrality_normalized,Real,"The normalized network centrality score, indicating structural importance."
+scores_culvert_risk,Integer,Binary risk score indicating the presence of a large culvert (0 or 1).
+scores_hydrography_risk,Integer,Binary risk score indicating an intersection with a water flowline (0 or 1).
+scores_criticality,Real,Composite score combining centrality and redundancy. Higher score indicates higher criticality.
+scores_criticality_v2,Real,Alternate composite criticality score using binned redundancy weight.
+scores_total_risk,Integer,"Composite score summing multiple hazard risk factors (flood, culvert, hydrography, events)."
+scores_resiliency,Real,Final inverse resilience score. A higher score indicates a segment is highly critical AND at high risk.
+scores_resiliency_v2,Real,Alternate final inverse resilience score using binned criticality.
+geom,Geometry,The geometry of the road segment.

@@ -1,0 +1,16 @@
+Column Name,Data Type,Description
+num_total_intersection_points,Integer,Total number of individual waterway interaction points along this road segment.
+num_distinct_flowlines_crossed,Integer,Number of unique NHDPlus HR waterway segments crossed by this road.
+max_qema_cfs,Float,Highest typical annual flow (Cubic Feet per Second) from any waterway this road segment crosses.
+max_streamorde,Integer,Highest NHDPlus Stream Order from any waterway this road segment crosses.
+max_totdasqkm,Float,Largest total upstream drainage area (km²) from any waterway this road segment crosses.
+avg_slope,Float,Average slope (m/m) of all waterway segments this road segment crosses.
+has_perennial_crossing,Boolean (or 0/1),Does this road cross at least one waterway that flows year-round?
+has_named_flowline_crossing,Boolean (or 0/1),Does this road cross at least one waterway with an official name?
+crosses_areal_waterbody,Boolean (or 0/1),"Does this road cross a waterway that is part of a lake, reservoir, or other mapped water area?"
+dominant_ftype_crossed,Integer,"The most common NHD `ftype` (e.g., Stream/River, Canal) among waterways crossed by this road."
+norm_max_qema,Float (0-1),"Normalized score (0-1) for `max_qema_cfs`, contributing to the composite score."
+norm_max_streamorde,Float (0-1),Normalized score (0-1) for `max_streamorde`.
+norm_max_totdasqkm,Float (0-1),Normalized score (0-1) for `max_totdasqkm`.
+score_has_perennial,Integer (0/1),Numerical score (0 or 1) for `has_perennial_crossing`.
+roadway_hydrological_hazard_score_v1,Float,The final composite hydrological hazard score for the road segment. Higher values indicate greater estimated baseline hydrological hazard from interacted waterways.

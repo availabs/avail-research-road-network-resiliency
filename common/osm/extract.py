@@ -3,10 +3,12 @@
 
 import os
 import re
+import stat
 import subprocess
+from enum import Enum
 from os import PathLike
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional, TypedDict
 
 import shapely
 from geopandas import GeoDataFrame
@@ -30,6 +32,97 @@ DEFAULT_OSM_EXTRACTS_DIR = Path(
         )
     )
 )
+
+# https://wiki.openstreetmap.org/wiki/Key:highway
+OSM_MAJOR_ROADWAY_HIGHWAY_TAGS = [
+    "motorway",
+    "motorway_link",
+    "motorway_junction",
+    "trunk",
+    "trunk_link",
+    "primary",
+    "primary_link",
+    "secondary",
+    "secondary_link",
+    "tertiary",
+    "tertiary_link",
+]
+
+# NOTE: Excluding "service" roads.
+OSM_MINOR_ROADWAY_HIGHWAY_TAGS = ["residential", "living_street", "unclassified"]
+
+OSM_NONSERVICE_ROADWAY_HIGHWAY_TAGS = (
+    OSM_MAJOR_ROADWAY_HIGHWAY_TAGS + OSM_MINOR_ROADWAY_HIGHWAY_TAGS
+)
+
+
+class OSMWaysFilter(Enum):
+    """
+    Defines filters for OSM ways based on their highway tags.
+
+    Attributes:
+        ALL (str): Includes all highway types.
+        MAJOR (str): Includes only major highway types (motorway, trunk, primary, secondary, tertiary, and their links).
+        MINOR (str): Includes only minor highway types (residential, living_street, unclassified).
+        NONSERVICE (str): Includes both major and minor highway types, excluding service roads.
+    """
+
+    ALL = "ALL"
+    MAJOR = "MAJOR"
+    MINOR = "MINOR"
+    NONSERVICE = "NONSERVICE"
+    ALL_EXCEPT_PARKING_AISLES = "ALL_EXCEPT_PARKING_AISLES"
+
+
+class OsmFilterConfig(TypedDict):
+    name: str
+    tag_filters: List[str]
+
+
+osmosis_tag_filters = {
+    OSMWaysFilter.ALL: OsmFilterConfig(
+        name="all",
+        tag_filters=[
+            "--tag-filter",
+            "accept-ways",
+            "highway=*",
+        ],
+    ),
+    OSMWaysFilter.MAJOR: OsmFilterConfig(
+        name="major",
+        tag_filters=[
+            "--tag-filter",
+            "accept-ways",
+            f"highway={','.join(OSM_MAJOR_ROADWAY_HIGHWAY_TAGS)}",
+        ],
+    ),
+    OSMWaysFilter.MINOR: OsmFilterConfig(
+        name="minor",
+        tag_filters=[
+            "--tag-filter",
+            "accept-ways",
+            f"highway={','.join(OSM_MINOR_ROADWAY_HIGHWAY_TAGS)}",
+        ],
+    ),
+    OSMWaysFilter.NONSERVICE: OsmFilterConfig(
+        name="nonservice",
+        tag_filters=[
+            "--tag-filter",
+            "accept-ways",
+            f"highway={','.join(OSM_NONSERVICE_ROADWAY_HIGHWAY_TAGS)}",
+        ],
+    ),
+    OSMWaysFilter.ALL_EXCEPT_PARKING_AISLES: OsmFilterConfig(
+        name="all-except-parking-aisles",
+        tag_filters=[
+            "--tag-filter",
+            "accept-ways",
+            "highway=*",
+            "reject-ways",
+            "service=parking_aisle",
+        ],
+    ),
+}
 
 
 def get_osm_version_from_pbf_filename(osm_pbf: PathLike):
@@ -151,58 +244,96 @@ def output_osmosis_filter_poly(
     with open(out_filename, "w") as f:
         f.write("\n".join(lines))
 
+    os.chmod(out_filename, stat.S_IREAD | stat.S_IRGRP | stat.S_IROTH)
+
     return out_filename
 
 
 def create_osm_region_road_network_extract_pbf(
     base_osm_pbf: os.PathLike,  #
-    geoid: str,
+    geoid: Optional[str],
     buffer_dist_mi: Optional[int] = DEFAULT_OSM_EXTRACT_BUFFER_DIST_MI,
     output_dir: Optional[os.PathLike] = DEFAULT_OSM_EXTRACTS_DIR,
     clean: bool = False,
+    ways_filter: OSMWaysFilter = OSMWaysFilter.NONSERVICE,
 ) -> str:
-    """
-    Creates an OSM road network extract (PBF file) for a specified region.
+    """Creates an OSM road network extract (PBF file) for a specified geographic region.
 
-    This function uses an input OSM PBF file and a US Census GEOID
-    (geoid) to generate a road network extract for a region. A buffer
-    distance (in miles) is applied to the region boundary, and an Osmosis
-    polygon filter (.poly file) is created from the buffered boundary. The
-    function then builds and runs an Osmosis command to extract major and
-    minor roadways from the PBF file based on highway tags, and outputs the
-    result to a new PBF file.
+    This function leverages Osmosis to filter a base OpenStreetMap PBF file,
+    producing a smaller PBF extract containing only road network data relevant
+    to a specific geographic area. The area can be defined by a US Census GEOID
+    and an optional buffer distance. A polygon filter file (`.poly`) is
+    generated from the buffered region boundary to guide the Osmosis extraction.
+    The extraction process is configured to include only specified highway types
+    and ensures that all ways are complete by including necessary nodes.
 
     Args:
-        osm_pbf (os.PathLike): Path to the input OSM PBF file.
-        geoid (str): US Census GEOID for the target region.
-        buffer_dist_mi (int, optional): Buffer distance in miles around the
-            region. Defaults to 10.
-        output_dir (os.PathLike, optional): Directory in which output files are
-            saved. Defaults to the current working directory.
+        base_osm_pbf (os.PathLike): The path to the input OpenStreetMap PBF file
+            from which the extract will be created.
+        geoid (Optional[str]): The US Census GEOID (e.g., '36001' for Albany County, NY)
+            that defines the primary geographic region of interest. If None, no
+            spatial filtering is applied.
+        buffer_dist_mi (Optional[int]): An optional buffer distance in miles to
+            extend around the `geoid` region. This ensures that roads just outside
+            the strict boundary are also included. Defaults to
+            `DEFAULT_OSM_EXTRACT_BUFFER_DIST_MI` (10 miles).
+        output_dir (Optional[os.PathLike]): The directory where the generated
+            `.poly` file and the output PBF extract will be saved. Defaults to
+            `DEFAULT_OSM_EXTRACTS_DIR`.
+        clean (bool): If `True`, forces the recreation of the output PBF file
+            even if a file with the same name already exists. If `False` and the
+            file exists, the existing file path is returned. Defaults to `False`.
+        ways_filter (OSMWaysFilter): An enum member specifying which OSM ways to
+            include based on highway tags. The filter determines both the
+            Osmosis tag filtering arguments and the prefix for the output
+            filename. Defaults to `OSMWaysFilter.NONSERVICE`.
 
     Returns:
-        str: The path to the output extracted OSM PBF file.
+        str: The absolute path to the newly created or existing OSM PBF extract file.
 
     Raises:
-        subprocess.CalledProcessError: If the Osmosis subprocess fails.
+        subprocess.CalledProcessError: If the underlying Osmosis command fails
+            during execution. Details of the error can be found in the associated
+            log file generated alongside the output PBF.
     """
+    filter_config = osmosis_tag_filters[ways_filter]
+    osm_ways_filter_name = filter_config["name"]
+    osm_tag_filter = filter_config["tag_filters"]
 
-    region_name = get_geography_region_name(geoid=geoid, buffer_dist_mi=buffer_dist_mi)
+    if geoid:
+        region_name = get_geography_region_name(
+            geoid=geoid, buffer_dist_mi=buffer_dist_mi
+        )
 
-    region_gdf = get_region_boundary_gdf(geoid)
+        region_prefix = f"{region_name}_"
 
-    buffered_region_gdf = get_buffered_region_gdf(
-        region_gdf=region_gdf,  #
-        buffer_dist_mi=buffer_dist_mi,
-    )
+        region_gdf = get_region_boundary_gdf(geoid)
 
-    poly_filename = os.path.join(output_dir, f"{region_name}.poly")
+        buffered_region_gdf = get_buffered_region_gdf(
+            region_gdf=region_gdf,  #
+            buffer_dist_mi=buffer_dist_mi,
+        )
+
+        poly_filename = os.path.join(output_dir, f"{region_name}.poly")
+
+        output_osmosis_filter_poly(
+            region_gdf=buffered_region_gdf,  #
+            out_filename=poly_filename,
+        )
+
+        spatial_filter = [
+            "--bounding-polygon",
+            f"file={poly_filename}",
+        ]
+    else:
+        region_prefix = ""  # No region, so no prefix
+        spatial_filter = []
 
     output_file_basename = (
-        f"nonservice-roadways-{region_name}_{os.path.basename(base_osm_pbf)}"
+        f"{osm_ways_filter_name}-ways-{region_prefix}{os.path.basename(base_osm_pbf)}"
     )
 
-    output_file = os.path.join(output_dir, output_file_basename)
+    output_file = os.path.join(output_dir, output_file_basename)  # type: ignore
 
     if os.path.exists(output_file):
         if clean:
@@ -210,51 +341,27 @@ def create_osm_region_road_network_extract_pbf(
         else:
             return output_file
 
-    output_osmosis_filter_poly(
-        region_gdf=buffered_region_gdf,  #
-        out_filename=poly_filename,
-    )
-
-    # https://wiki.openstreetmap.org/wiki/Key:highway
-    major_roadways = [
-        "motorway",
-        "motorway_link",
-        "motorway_junction",
-        "trunk",
-        "trunk_link",
-        "primary",
-        "primary_link",
-        "secondary",
-        "secondary_link",
-        "tertiary",
-        "tertiary_link",
-    ]
-
-    # NOTE: Excluding "service" roads.
-    minor_roadways = ["residential", "living_street", "unclassified"]
-
-    included_highways = ",".join(major_roadways + minor_roadways)
-
     # https://github.com/openstreetmap/osmosis/blob/main/doc/detailed-usage.adoc
-    osmium_extract_cmd = [
-        OSMOSIS,
-        "--read-pbf-fast",
-        base_osm_pbf,
-        "--sort",
-        "type=TypeThenId",
-        "--bounding-polygon",
-        f"file={poly_filename}",
-        "completeWays=yes",
-        "completeRelations=no",
-        "--tag-filter",
-        "accept-ways",
-        f"highway={included_highways}",
-        "--used-node",
-        "--buffer",
-        "500",
-        "--write-pbf",
-        output_file,
-    ]
+    osmium_extract_cmd = (
+        [
+            OSMOSIS,
+            "--read-pbf-fast",
+            base_osm_pbf,
+        ]
+        + spatial_filter
+        + osm_tag_filter
+        + [
+            "completeWays=yes",
+            "completeRelations=no",
+            "--used-node",
+            "--buffer",
+            "500",
+            "--sort",
+            "type=TypeThenId",
+            "--write-pbf",
+            output_file,
+        ]
+    )
 
     log_filename = f"{output_file[: -len('.osm.pbf')]}.extract.log"
 
@@ -272,5 +379,8 @@ def create_osm_region_road_network_extract_pbf(
             print(f"Error running Osmosis. Check the logfile: {log_filename}")
             print(f"Command: {'\n\t'.join([relative_path] + osmium_extract_cmd[1:])}")
             raise
+
+    os.chmod(log_filename, stat.S_IREAD | stat.S_IRGRP | stat.S_IROTH)
+    os.chmod(output_file, stat.S_IREAD | stat.S_IRGRP | stat.S_IROTH)
 
     return output_file

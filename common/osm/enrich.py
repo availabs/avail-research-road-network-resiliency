@@ -6,25 +6,40 @@ import math
 import os
 import pickle
 from collections.abc import Iterable
-from enum import Enum
 from os import PathLike
 from pprint import pprint
-from typing import List, Literal, Optional, Tuple, TypeAlias, TypedDict, Union
+from typing import List, Literal, Optional, Tuple, Union, cast
 
 import geopandas as gpd
 import networkx as nx
 import osmnx as ox
 import pandas as pd
+import pandera.pandas as pa
 import pyproj
 import pyrosm
 import shapely
 from geopandas import GeoDataFrame
 from networkx import MultiDiGraph
+from pandera.typing import DataFrame
 from shapely import LineString
 from tqdm import tqdm
 
 from common.constants import DEFAULT_BUFFER_DIST_MI, MILES_PER_METER
 from common.osm.extract import get_osm_version_from_pbf_filename
+from common.osm.schemas import (
+    BridgeSpanSchema,
+    CombinedRoadSpansSchema,
+    EdgesSchema,
+    EnrichedOsmNetworkDataWithFullMetadata,
+    FullEdgesSchema,
+    FullEnrichedOsmNetworkData,
+    FullEnrichedOsmNetworkDataWithRegions,
+    NodesSchema,
+    NonBridgeSpanSchema,
+    OsmNetworkMetadata,
+    RoadClass,
+    SimplifiedEnrichedOsmNetworkDataWithFullMetadata,
+)
 from common.us_census.tiger.utils import (
     get_buffered_region_gdf,
     get_geography_region_name,
@@ -39,62 +54,7 @@ OSMNX_PICKLE_DIR = os.path.abspath(
     os.path.join(THIS_DIR, "../../data/pickles/osmnx/enriched-osm")
 )
 
-ENRICH_VERSION = "0.1.1"
-
-OSMEdgeID: TypeAlias = Tuple[int, int, int]  # (u, v, key)
-
-
-class RoadClass(Enum):
-    """
-    RoadClass enum defines road categories as specified in the OpenLR standard.
-
-    Each road category is assigned a numeric value that indicates its
-    relative importance within a road network. Lower numbers indicate
-    higher-order roads (e.g., 'motorway' is 0) while higher numbers denote
-    lower-order roads (e.g., 'residential' is 5). Notably, 'living_street' is
-    assigned 5.5 to distinguish it from 'residential' (5) and 'unclassified' (6).
-
-    For more details, see:
-      - OpenLR Specification: https://www.openlr.org/
-      - SharedStreets JS source: https://github.com/sharedstreets/sharedstreets-js/blob/98f8b78d0107046ed2ac1f681cff11eb5a356474/src/index.ts#L600-L613
-    """
-
-    motorway = 0
-    trunk = 1
-    primary = 2
-    secondary = 3
-    tertiary = 4
-    residential = 5
-    living_street = 5.5  # FIXME: In highway_type_analysis_for_way, roadclass is the Floor of the value.
-    unclassified = 6
-    service = 7
-    other = 8
-
-
-class EnrichedOsmNetworkData(TypedDict, total=True):
-    g: nx.MultiDiGraph
-    nodes_gdf: gpd.GeoDataFrame
-    edges_gdf: gpd.GeoDataFrame
-
-
-class EnrichedOsmNetworkDataWithRegions(EnrichedOsmNetworkData, total=True):
-    region_gdf: gpd.GeoDataFrame
-    buffered_region_gdf: gpd.GeoDataFrame
-
-
-class OsmNetworkMetadata(TypedDict, total=True):
-    osm_pbf: PathLike
-    geoid: str
-    buffer_dist_mi: int
-    region_name: str
-    osm_version: str
-
-
-class EnrichedOsmNetworkDataWithFullMetadata(
-    EnrichedOsmNetworkDataWithRegions, OsmNetworkMetadata, total=True
-):
-    pass
-
+ENRICH_VERSION = "0.1.2"
 
 # For OSMnx add_edge_speeds
 DEFAULT_HWY_SPEEDS = {
@@ -384,13 +344,15 @@ def highway_type_analysis_for_way(way: dict):
                 lowest_highway_type = hwy
 
     if highest_highway_type is None:
+        roadtype = ",".join(highway)
+
         return {
-            "roadclass": None,
-            "edge_min_roadclass": None,
-            "edge_max_roadclass": None,
-            "roadtype": None,
-            "edge_highest_highway_type": None,
-            "edge_lowest_highway_type": None,
+            "roadclass": RoadClass.other.value,
+            "edge_min_roadclass": RoadClass.other.value,
+            "edge_max_roadclass": RoadClass.other.value,
+            "roadtype": roadtype,
+            "edge_highest_highway_type": roadtype,
+            "edge_lowest_highway_type": roadtype,
         }
 
     min_roadclass = math.floor(min_roadclass)
@@ -1127,49 +1089,31 @@ def create_simple_segments_gdf(edges_gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     return simple_segments_gdf
 
 
+@pa.check_types(lazy=True)
+def convert_graph_to_gdfs(
+    g: nx.MultiDiGraph,
+) -> Tuple[DataFrame[NodesSchema], DataFrame[EdgesSchema]]:
+    nodes_gdf, edges_gdf = ox.convert.graph_to_gdfs(g, node_geometry=True)
+
+    nodes_gdf.sort_index(inplace=True)
+    edges_gdf.sort_index(inplace=True)
+
+    return (
+        cast(DataFrame[NodesSchema], nodes_gdf),
+        cast(DataFrame[EdgesSchema], edges_gdf),
+    )
+
+
 def _create_enriched_osmnx_graph(
     osm: pyrosm.OSM,  #
     region_boundary_gdf: Optional[GeoDataFrame] = None,
-    include_base_osm_data: bool = False,
-) -> EnrichedOsmNetworkData:
-    """
-    Create and enrich an OSMnx graph from Pyrosm OSM data for road network analysis.
-
-    This function processes OpenStreetMap data using Pyrosm to create a road network
-    graph optimized for driving analysis by performing the following steps:
-      1. Extract driving network data (nodes and edges) from the OSM object
-      2. Add region intersection information to edges if a boundary is provided
-      3. Convert to a NetworkX graph with OSMnx compatibility
-      4. Simplify the graph structure using OSMnx's simplify_graph
-      5. Enrich the graph with additional attributes using enrich_osmnx_graph
-      6. Convert the enriched graph to GeoDataFrames for nodes and edges
-
-    Parameters:
-        osm (pyrosm.OSM): A Pyrosm OSM object containing the raw OpenStreetMap data
-        region_boundary_gdf (GeoDataFrame, optional): A GeoDataFrame containing a polygon
-                            boundary representing the original, unbuffered region. Used to
-                            determine which edges intersect with the specific region.
-                            If None, all edges are marked as intersecting the region.
-
-    Returns:
-        dict: A dictionary containing three elements:
-            - 'g': The enriched and simplified MultiDiGraph
-            - 'nodes_gdf': A GeoDataFrame of all nodes in the graph
-            - 'edges_gdf': A GeoDataFrame of all edges in the graph
-
-    Notes:
-        - The network_type is explicitly set to "driving" to ensure oneway tags are applied
-        - When working with a buffered OSM extract (where the OSM data includes areas outside
-          the region of interest), the '_intersects_region_' attribute indicates whether each
-          road segment intersects with the original unbuffered region
-        - The graph is simplified using OSMnx's simplify_graph function
-        - The enrich_osmnx_graph function is called to add additional attributes
-        - The returned GeoDataFrames have their indices sorted for consistency
-    """
+    network_type: str = "driving",
+) -> FullEnrichedOsmNetworkData:
+    """Create and enrich an OSMnx graph from Pyrosm OSM data for road network analysis."""
 
     # https://pyrosm.readthedocs.io/en/latest/reference.html#pyrosm.pyrosm.OSM.get_network
     # NOTE: MUST set the network_type to "driving". The default network_type is "walking" and "oneway" tags do not apply.
-    nodes, edges = osm.get_network(nodes=True, network_type="driving")
+    nodes, edges = osm.get_network(nodes=True, network_type=network_type)  # type: ignore
 
     # Add the _intersects_region_ column that indicates whether the
     if region_boundary_gdf is not None:
@@ -1184,13 +1128,13 @@ def _create_enriched_osmnx_graph(
         edges["_intersects_region_"] = True
 
     # Export the nodes and edges to NetworkX graph
-    G = osm.to_graph(
+    G: nx.MultiDiGraph = osm.to_graph(
         nodes,  #
         edges,
         graph_type="networkx",
         retain_all=True,
         osmnx_compatible=True,
-    )
+    )  # type: ignore
 
     # Our road network graph can be represented as two GeoDataFrames
     g = ox.simplify_graph(
@@ -1203,26 +1147,22 @@ def _create_enriched_osmnx_graph(
     verify_osm_alignment(g=g, G=G)
     clean_geometries(g=g, G=G)
 
-    nodes_gdf, edges_gdf = ox.convert.graph_to_gdfs(g)
+    nodes_gdf, edges_gdf = convert_graph_to_gdfs(g)
 
-    nodes_gdf.sort_index(inplace=True)
-    edges_gdf.sort_index(inplace=True)
-
-    if include_base_osm_data:
-        return {
-            "ENRICH_VERSION": ENRICH_VERSION,
-            "g": g,
-            "nodes_gdf": nodes_gdf,
-            "edges_gdf": edges_gdf,
-            "G": G,
-        }
-
-    edges_gdf.drop(columns=["merged_edges"], inplace=True)
-
-    return {"g": g, "nodes_gdf": nodes_gdf, "edges_gdf": edges_gdf}
+    full_data: FullEnrichedOsmNetworkData = {
+        "ENRICH_VERSION": ENRICH_VERSION,
+        "g": g,
+        "nodes_gdf": nodes_gdf,
+        "edges_gdf": cast(DataFrame[FullEdgesSchema], edges_gdf),
+        "G": G,
+    }
+    return full_data
 
 
-def create_bridge_spans_gdf(edges_gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+@pa.check_types(lazy=True)
+def create_bridge_spans_gdf(
+    edges_gdf: DataFrame[EdgesSchema],
+) -> DataFrame[BridgeSpanSchema]:
     """
     Generate a GeoDataFrame of bridge spans from an edges GeoDataFrame.
 
@@ -1280,16 +1220,13 @@ def create_bridge_spans_gdf(edges_gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
         "start_ratio_along",
         "end_ratio_along",
         "osmids",
-        "refs",
-        "names",
-        "bridge_tags",
         "osm_nodes",
     ]
 
     bridges_gdf = gpd.GeoDataFrame(
-        bridge_spans if bridge_spans else None,  #
+        data=bridge_spans if bridge_spans else None,  #
         columns=index_keys + columns,
-        crs=edges_gdf.crs,
+        crs=edges_gdf.crs,  # type: ignore
     )
 
     if bridge_spans:
@@ -1302,7 +1239,7 @@ def create_bridge_spans_gdf(edges_gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
         empty_index = pd.MultiIndex.from_arrays([[], [], [], []], names=index_keys)
         bridges_gdf.set_index(empty_index, inplace=True)
 
-    return bridges_gdf
+    return cast(DataFrame[BridgeSpanSchema], bridges_gdf)
 
 
 # Assuming generate_bridge_spans_along_info remains as provided
@@ -1315,8 +1252,6 @@ def generate_bridge_spans_along_info(osm_way_along_info):
             if current_span is None:
                 current_span = {
                     "osmids": [segment["osmid"]],
-                    "refs": [segment["ref"]],
-                    "names": [segment["name"]],
                     "bridge_tags": [segment["bridge_tag"]],
                     "osm_nodes": segment["osm_nodes"].copy(),
                     "start_ratio_along": segment["start_ratio_along"],
@@ -1326,9 +1261,6 @@ def generate_bridge_spans_along_info(osm_way_along_info):
                 }
             else:
                 current_span["osmids"].append(segment["osmid"])
-
-                current_span["refs"].append(segment["ref"])
-                current_span["names"].append(segment["name"])
 
                 current_span["bridge_tags"].append(segment["bridge_tag"])
                 current_span["osm_nodes"].extend(segment["osm_nodes"][1:])
@@ -1345,7 +1277,10 @@ def generate_bridge_spans_along_info(osm_way_along_info):
     return bridge_spans_along_info
 
 
-def create_nonbridge_spans_gdf(edges_gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+@pa.check_types(lazy=True)
+def create_nonbridge_spans_gdf(
+    edges_gdf: DataFrame[EdgesSchema],
+) -> DataFrame[NonBridgeSpanSchema]:
     """
     Create a GeoDataFrame of non-bridge road segments from an edges GeoDataFrame.
 
@@ -1410,7 +1345,7 @@ def create_nonbridge_spans_gdf(edges_gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     spans_df = gpd.GeoDataFrame(
         non_bridge_spans if non_bridge_spans else None,
         columns=index_keys + columns,
-        crs=edges_gdf.crs,
+        crs=edges_gdf.crs,  # type: ignore
     )
 
     # Set multi-index for both empty and populated cases
@@ -1425,7 +1360,7 @@ def create_nonbridge_spans_gdf(edges_gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
         empty_index = pd.MultiIndex.from_arrays([[], [], [], []], names=index_keys)
         spans_df.set_index(empty_index, inplace=True)
 
-    return spans_df
+    return cast(DataFrame[NonBridgeSpanSchema], spans_df)
 
 
 def generate_nonbridge_spans_along_info(osm_way_along_info):
@@ -1478,24 +1413,75 @@ def generate_nonbridge_spans_along_info(osm_way_along_info):
     return non_bridge_spans_along_info
 
 
-def create_enriched_osmnx_graph(
-    osm_pbf: PathLike, include_base_osm_data=False
-) -> EnrichedOsmNetworkData:
-    # From https://pyrosm.readthedocs.io/en/latest/basics.html?highlight=osmnx#export-to-networkx-osmnx
-    osm = pyrosm.OSM(osm_pbf)
+@pa.check_types(lazy=True)
+def create_combined_road_spans(
+    edges_gdf: DataFrame[EdgesSchema],
+) -> DataFrame[CombinedRoadSpansSchema]:
+    """
+    Combines non-bridge and bridge GeoDataFrames, adds a road_span_type,
+    and sets a new combined index.
+    """
+    nonbridge_spans_gdf = create_nonbridge_spans_gdf(edges_gdf=edges_gdf)
+    bridge_spans_gdf = create_bridge_spans_gdf(edges_gdf=edges_gdf)
 
-    return _create_enriched_osmnx_graph(
-        osm=osm,  #
-        include_base_osm_data=include_base_osm_data,
+    df_list = []
+
+    # Process non-bridge spans
+    if not nonbridge_spans_gdf.empty:
+        temp_nonbridge = nonbridge_spans_gdf.reset_index()
+        temp_nonbridge["_road_span_type_"] = "NONBRIDGE"
+        df_list.append(temp_nonbridge)
+
+    # Process bridge spans
+    if not bridge_spans_gdf.empty:
+        temp_bridge = bridge_spans_gdf.reset_index()
+        temp_bridge["_road_span_type_"] = "BRIDGE"
+        df_list.append(temp_bridge)
+
+    final_index_names = ["u", "v", "key", "span_idx"]
+
+    if not df_list:
+        empty_index = pd.MultiIndex.from_arrays(
+            [[] for _ in final_index_names],  #
+            names=final_index_names,
+        )
+
+        return gpd.GeoDataFrame(
+            index=empty_index,  #
+            crs=edges_gdf.crs,  # type: ignore
+        )
+
+    combined_spans_df = pd.concat(df_list, ignore_index=True)
+
+    # Sort by edge identifier and then by the start position of the span
+    # to ensure correct sequential ordering along each original edge.
+    combined_spans_df = combined_spans_df.sort_values(
+        by=["u", "v", "key", "start_ratio_along"]
     )
 
+    # Create a new, sequential span_idx within each edge group.
+    combined_spans_df["span_idx"] = combined_spans_df.groupby(
+        ["u", "v", "key"]
+    ).cumcount()
 
-def create_enriched_osmnx_graph_using_buffered_region_gdfs(
-    osm_pbf: PathLike,  #
+    # Ensure it's a GeoDataFrame before setting index
+    road_spans_gdf = gpd.GeoDataFrame(
+        combined_spans_df,
+        geometry="geometry",
+        crs=edges_gdf.crs,  # type: ignore
+    )
+
+    road_spans_gdf = road_spans_gdf.set_index(final_index_names).sort_index()
+
+    return cast(DataFrame[CombinedRoadSpansSchema], road_spans_gdf)
+
+
+def _create_full_enriched_osmnx_graph_using_buffered_region_gdfs(
+    osm_pbf: PathLike,
     region_gdf: GeoDataFrame,
     buffered_region_gdf: GeoDataFrame,
-    include_base_osm_data: bool = False,
-) -> EnrichedOsmNetworkDataWithRegions:
+    network_type: str = "driving",
+) -> FullEnrichedOsmNetworkDataWithRegions:
     """
     Create an enriched OSMnx graph using an OSM PBF file and both original and buffered region geometries.
 
@@ -1544,16 +1530,18 @@ def create_enriched_osmnx_graph_using_buffered_region_gdfs(
     d = _create_enriched_osmnx_graph(
         osm=osm,  #
         region_boundary_gdf=region_gdf,
-        include_base_osm_data=include_base_osm_data,
+        network_type=network_type,
     )
 
-    return d | {"region_gdf": region_gdf, "buffered_region_gdf": buffered_region_gdf}
+    result = d | {"region_gdf": region_gdf, "buffered_region_gdf": buffered_region_gdf}
+
+    return cast(FullEnrichedOsmNetworkDataWithRegions, result)
 
 
 def parse_osm_region_parameters(
     osm_pbf: PathLike,  #
-    geoid: Optional[str],
-    buffer_dist_mi: Optional[int],
+    geoid: Optional[str] = None,
+    buffer_dist_mi: Optional[int] = None,
 ) -> OsmNetworkMetadata:
     # Determine geoid and buffer distance if not provided.
     if not geoid:
@@ -1581,12 +1569,18 @@ def parse_osm_region_parameters(
         buffer_dist_mi=buffer_dist_mi,
         region_name=region_name,
         osm_version=osm_version,
-    )
+    )  # type: ignore
 
 
-def get_enriched_osm_pickle_path(osm_pbf: PathLike):
+def get_enriched_osm_pickle_path(
+    osm_pbf: PathLike,  #
+    network_type: str = "driving",
+):
     base = os.path.basename(osm_pbf)
     base_without_extension = os.path.splitext(base)[0]
+
+    if network_type != "driving":
+        base_without_extension += f".network_type_{network_type}"
 
     pickled_name = base_without_extension + ".pickle"
     pickled_path = os.path.join(OSMNX_PICKLE_DIR, pickled_name)
@@ -1594,11 +1588,11 @@ def get_enriched_osm_pickle_path(osm_pbf: PathLike):
     return pickled_path
 
 
-def create_enriched_osmnx_graph_for_region(
+def create_full_enriched_osmnx_graph_for_region(
     osm_pbf: PathLike,  #
     geoid: Optional[str] = None,
     buffer_dist_mi: Optional[int] = None,
-    include_base_osm_data: bool = False,
+    network_type: str = "driving",
 ) -> EnrichedOsmNetworkDataWithFullMetadata:
     """
     Create an enriched OSMnx graph for a geographic region identified by a GEOID.
@@ -1640,9 +1634,7 @@ def create_enriched_osmnx_graph_for_region(
     """
 
     # Only the full enriched OSM, with the base data, gets cached.
-    enriched_pickle_path = (
-        get_enriched_osm_pickle_path(osm_pbf=osm_pbf) if include_base_osm_data else None
-    )
+    enriched_pickle_path = get_enriched_osm_pickle_path(osm_pbf=osm_pbf)
 
     if enriched_pickle_path:
         if os.path.exists(enriched_pickle_path):
@@ -1655,7 +1647,9 @@ def create_enriched_osmnx_graph_for_region(
                     os.remove(enriched_pickle_path)
 
     parsed_params = parse_osm_region_parameters(
-        osm_pbf=osm_pbf, geoid=geoid, buffer_dist_mi=buffer_dist_mi
+        osm_pbf=osm_pbf,  #
+        geoid=geoid,
+        buffer_dist_mi=buffer_dist_mi,
     )
 
     geoid = parsed_params["geoid"]
@@ -1670,11 +1664,11 @@ def create_enriched_osmnx_graph_for_region(
         buffer_dist_mi=buffer_dist_mi,
     )
 
-    d = create_enriched_osmnx_graph_using_buffered_region_gdfs(
+    d = _create_full_enriched_osmnx_graph_using_buffered_region_gdfs(
         osm_pbf=osm_pbf,  #
         region_gdf=region_gdf,
         buffered_region_gdf=buffered_region_gdf,
-        include_base_osm_data=include_base_osm_data,
+        network_type=network_type,
     )
 
     if d["edges_gdf"].crs != "EPSG:4326":
@@ -1690,11 +1684,8 @@ def create_enriched_osmnx_graph_for_region(
     if "G" in d:
         d["G"].graph.setdefault("_region_name_", region_name)
 
-    enriched_osm = d | dict(
-        region_name=region_name,
-        geoid=geoid,
-        buffer_dist_mi=buffer_dist_mi,
-    )
+    enriched_osm_dict = {**d, **parsed_params}
+    enriched_osm = cast(EnrichedOsmNetworkDataWithFullMetadata, enriched_osm_dict)
 
     if enriched_pickle_path:
         os.makedirs(
@@ -1706,3 +1697,61 @@ def create_enriched_osmnx_graph_for_region(
             pickle.dump(obj=enriched_osm, file=f)
 
     return enriched_osm
+
+
+def create_simplified_enriched_osmnx_graph_for_region(
+    osm_pbf: PathLike,  #
+    geoid: Optional[str] = None,
+    buffer_dist_mi: Optional[int] = None,
+    network_type: str = "driving",
+) -> SimplifiedEnrichedOsmNetworkDataWithFullMetadata:
+    """
+    Creates a simplified, enriched OSMnx graph for a geographic region.
+
+    This function is a convenience wrapper that first generates the full, detailed
+    enriched graph (which may be retrieved from a cache) and then simplifies it
+    by removing detailed base OSM data not needed for high-level analysis.
+
+    The simplification process involves:
+    - Removing the original, unsimplified Pyrosm graph (`G`).
+    - Dropping the `merged_edges` column from the `edges_gdf`, which tracks
+      how original OSM ways were merged into simplified edges.
+
+    Args:
+        osm_pbf (PathLike): Path to the OpenStreetMap PBF file.
+        geoid (Optional[str]): Geographic identifier for the region. If None, it's
+            inferred from the `osm_pbf` filename.
+        buffer_dist_mi (Optional[int]): Buffer distance in miles around the region.
+            If None, it's inferred from the `osm_pbf` filename.
+        network_type (str): The type of network to extract (e.g., "driving").
+
+    Returns:
+        SimplifiedEnrichedOsmNetworkDataWithFullMetadata: A dictionary containing the
+            simplified graph (`g`), its corresponding GeoDataFrames (`nodes_gdf`,
+            `edges_gdf`), and metadata about the region.
+    """
+    full_enriched_data = create_full_enriched_osmnx_graph_for_region(
+        osm_pbf=osm_pbf,
+        geoid=geoid,
+        buffer_dist_mi=buffer_dist_mi,
+        network_type=network_type,
+    )
+
+    simplified_edges_gdf = full_enriched_data["edges_gdf"].drop(
+        columns=["merged_edges"]
+    )
+
+    simplified_data: SimplifiedEnrichedOsmNetworkDataWithFullMetadata = {
+        "g": full_enriched_data["g"],
+        "nodes_gdf": full_enriched_data["nodes_gdf"],
+        "edges_gdf": cast(DataFrame[EdgesSchema], simplified_edges_gdf),
+        "region_gdf": full_enriched_data["region_gdf"],
+        "buffered_region_gdf": full_enriched_data["buffered_region_gdf"],
+        "osm_pbf": full_enriched_data["osm_pbf"],
+        "geoid": full_enriched_data["geoid"],
+        "buffer_dist_mi": full_enriched_data["buffer_dist_mi"],
+        "region_name": full_enriched_data["region_name"],
+        "osm_version": full_enriched_data["osm_version"],
+    }
+
+    return simplified_data

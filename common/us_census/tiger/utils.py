@@ -25,17 +25,15 @@
 # https://github.com/osm-flex/osm-flex/blob/87c3031dd0882ebe10f45678e5649132bf05493b/src/osm_flex/clip.py#L204-L230
 # https://www2.census.gov/geo/pdfs/maps-data/data/tiger/tgrshp2023/2023_TIGER_GDB_Record_Layouts.pdf
 
-import math
 import os
 import re
 from enum import Enum
-from pprint import pprint
 from textwrap import dedent
 from types import MappingProxyType
 
 import geopandas as gpd
 import pyproj
-from shapely import box
+from shapely import Geometry
 
 this_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -50,6 +48,7 @@ region_level_gdb = os.path.join(data_dir, "cb_2023_us_region_500k.zip")
 us_substategeo_gdb = os.path.join(data_dir, "tlgdb_2024_a_us_substategeo.gdb.zip")
 # NOTE: For now only supporting New York State because entire country is too large.
 nys_tiger_gdb = os.path.join(data_dir, "tlgdb_2022_a_36_ny.gdb.zip")
+us_cbsa_gdb = os.path.join(data_dir, "tl_2023_us_cbsa.zip")
 
 FEET_PER_MILE = 5280
 
@@ -67,6 +66,7 @@ class GeoLevel(Enum):
     REGION = "region"
     STATE = "state"
     COUNTY = "county"
+    CORE_BASED_STATISTICAL_AREA = "core-based-statistical-area"
     CENSUS_DESIGNATED_PLACE = "census-designated-place"
     INCORPORATED_PLACE = "incorporated-place"
     COUNTY_SUBDIVISION = "county-subdivision"
@@ -98,7 +98,7 @@ geoid_length_to_geolevels = MappingProxyType(
             (0, [GeoLevel.COUNTRY]),
             (1, [GeoLevel.REGION]),
             (2, [GeoLevel.STATE]),
-            (5, [GeoLevel.COUNTY]),
+            (5, [GeoLevel.COUNTY, GeoLevel.CORE_BASED_STATISTICAL_AREA]),
             (7, [GeoLevel.CENSUS_DESIGNATED_PLACE, GeoLevel.INCORPORATED_PLACE]),
             (10, [GeoLevel.COUNTY_SUBDIVISION]),
             (11, [GeoLevel.CENSUS_TRACT]),
@@ -116,6 +116,7 @@ geolevel_to_gdb = MappingProxyType(
         GeoLevel.REGION: region_level_gdb,
         GeoLevel.STATE: us_substategeo_gdb,
         GeoLevel.COUNTY: us_substategeo_gdb,
+        GeoLevel.CORE_BASED_STATISTICAL_AREA: us_cbsa_gdb,
         GeoLevel.CENSUS_DESIGNATED_PLACE: us_substategeo_gdb,
         GeoLevel.INCORPORATED_PLACE: us_substategeo_gdb,
         GeoLevel.COUNTY_SUBDIVISION: us_substategeo_gdb,
@@ -132,6 +133,7 @@ geolevel_to_layer_name = MappingProxyType(
         GeoLevel.REGION: "cb_2023_us_region_500k",
         GeoLevel.STATE: "State",
         GeoLevel.COUNTY: "County",
+        GeoLevel.CORE_BASED_STATISTICAL_AREA: "tl_2023_us_cbsa",
         GeoLevel.CENSUS_DESIGNATED_PLACE: "Census_Designated_Place",
         GeoLevel.INCORPORATED_PLACE: "Incorporated_Place",
         GeoLevel.COUNTY_SUBDIVISION: "County_Subdivision",
@@ -142,21 +144,6 @@ geolevel_to_layer_name = MappingProxyType(
 )
 
 us_census_regions = (1, 2, 3, 4)
-
-
-def geoid_to_gdal_potential_gdbs(geoid):
-    """
-    Get the potential GDAL handlers for the given geoid.
-    """
-    # NOTE: While it is currently the case that len(geoid) maps 1-to-1 with Census Geodatabases
-    #   that may not hold true if we add more GeoLevels such as
-    #   Statistical Areas, Metropolitan Divisions, and Urbanized Areas.
-    #   Therefore, we future-proof the code by returning a list rather than a scalar value.
-    #   Maybe YAGNI, but it's a small change. Changing APIs is a pain.
-
-    return [
-        geolevel_to_gdb[geolevel] for geolevel in geoid_length_to_geolevels[len(geoid)]
-    ]
 
 
 def get_geolevel_for_geoid(geoid):
@@ -176,22 +163,23 @@ def get_geolevel_for_geoid(geoid):
         ) AS geoid_exists
     """
 
-    for vsizip_handler in geoid_to_gdal_potential_gdbs(geoid):
-        for geolevel in geoid_length_to_geolevels[len(geoid)]:
-            layer_name = geolevel_to_layer_name[geolevel]
+    for geolevel in geoid_length_to_geolevels[len(geoid)]:  # type: ignore
+        vsizip_handler = geolevel_to_gdb[geolevel]
 
-            sql = sql_template.format(layer_name=layer_name, geoid=geoid)
+        layer_name = geolevel_to_layer_name[geolevel]
 
-            exists = gpd.read_file(
-                filename=vsizip_handler,
-                engine="pyogrio",
-                sql_dialect="SQLITE",
-                sql=sql,
-                ignore_geometry=True,
-            ).loc[0, "geoid_exists"]
+        sql = sql_template.format(layer_name=layer_name, geoid=geoid)
 
-            if exists:
-                return geolevel
+        exists = gpd.read_file(
+            filename=vsizip_handler,
+            engine="pyogrio",
+            sql_dialect="SQLITE",
+            sql=sql,
+            ignore_geometry=True,
+        ).loc[0, "geoid_exists"]
+
+        if exists:
+            return geolevel
 
     raise BaseException(f"Unable to find geo level for geoid {geoid}")
 
@@ -204,7 +192,10 @@ def verify_buffer_dist_mi_is_integer(buffer_dist_mi):
         raise BaseException("INVARIANT BROKEN: buffer_dist_mi must be an integer.")
 
 
-def get_geography_region_name(geoid, buffer_dist_mi=None):
+def get_geography_region_name(
+    geoid: str,  #
+    buffer_dist_mi=None,
+):
     """
     Generate a unique name for the geography region with the given geoid.
     If buffer_dist_mi is provided, the name will include the buffer distance.
@@ -349,8 +340,67 @@ def get_geoids_with_prefix_for_geolevel(geoid_prefix, geolevel):
     return geoids
 
 
+def get_geoids_for_geolevel_that_overlap_geometry(
+    geometry_mask: Geometry,  #
+    geolevel: GeoLevel,
+):
+    """
+    This function only supports geoid_prefixes for State level and below.
+    In the census geographic entities hierarchy, not all entities are
+    encloses within states and therefore geoid prefixes do not
+    encode the hierarchical nesting of geographic regions.
+    """
+
+    if isinstance(geolevel, str):
+        geolevel = geolevel_name_to_enum_entry[geolevel]
+
+    layer_name = geolevel_to_layer_name[geolevel]
+
+    vsizip_handler = geolevel_to_gdb[geolevel]
+
+    geoids = gpd.read_file(
+        filename=vsizip_handler,
+        engine="pyogrio",
+        columns=["GEOID"],
+        layer=layer_name,
+        mask=geometry_mask,
+        ignore_geometry=True,
+    )["GEOID"].tolist()
+
+    return geoids
+
+
+def get_geodataframes_for_geolevel_that_overlap_geometry(
+    geometry_mask: Geometry,  #
+    geolevel: GeoLevel,
+):
+    """
+    This function only supports geoid_prefixes for State level and below.
+    In the census geographic entities hierarchy, not all entities are
+    encloses within states and therefore geoid prefixes do not
+    encode the hierarchical nesting of geographic regions.
+    """
+
+    if isinstance(geolevel, str):
+        geolevel = geolevel_name_to_enum_entry[geolevel]
+
+    layer_name = geolevel_to_layer_name[geolevel]
+
+    vsizip_handler = geolevel_to_gdb[geolevel]
+
+    gdf = gpd.read_file(
+        filename=vsizip_handler,
+        engine="pyogrio",
+        layer=layer_name,
+        mask=geometry_mask,
+        # ignore_geometry=True,
+    )
+
+    return gdf
+
+
 def get_laea_crs_for_region(
-    region_gdf: gpd.GeoDataFrame #
+    region_gdf: gpd.GeoDataFrame,  #
 ) -> pyproj.CRS:
     assert region_gdf.crs.is_geographic, "region_gdf CRS MUST be geographic"
 

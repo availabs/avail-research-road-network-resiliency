@@ -1,0 +1,41 @@
+Field Name,Data Type,Category,Description,Source Dataset
+osm_road_name,String,Road and Waterway Names,"The official or common name of the road from the OpenStreetMap data (e.g., ""US Route 9W"" or ""Main Street"").",OSM
+osm_from_name,String,Internal Identifiers and Debugging Fields,The name of the road from which the current road segment originates.,OSM
+osm_to_name,String,Internal Identifiers and Debugging Fields,The name of the road to which the current road segment connects.,OSM
+naacc_road_name,String,Road and Waterway Names,The name of the road as recorded by the field surveyor.,NAACC
+naacc_crossing_comment,String,NAACC Crossing Attributes,General comments about the overall crossing from the surveyor.,NAACC
+naacc_location_description,String,NAACC Crossing Attributes,Text notes from the surveyor describing the location of the crossing.,NAACC
+naacc_stream_name,String,Road and Waterway Names,The name of the stream as recorded by the field surveyor.,NAACC
+nhd_waterway_name,String,Road and Waterway Names,"The official name of the stream or river from the National Hydrography Dataset, if available.",NHDPlus
+match_distance_m,Real,Match Quality and Provenance,The distance in meters between the original NAACC survey point and its final matched location on the road network.,Fused
+match_confidence_score,Real,Match Quality and Provenance,"A score from 0 to 100 indicating the confidence in the match. Higher scores represent more confident matches based on distance, name similarity, and match type.",Fused
+naacc_crossing_code,String,NAACC Crossing Attributes,"The unique, persistent identifier for the crossing from the NAACC database.",NAACC
+naacc_crossing_type,String,NAACC Crossing Attributes,"The type of crossing structure recorded by the surveyor (e.g., 'Bridge', 'Culvert', 'Multiple Culvert').",NAACC
+naacc_inlet_structure_type,String,NAACC Crossing Attributes,"The shape and material of the structure's inlet (e.g., 'Round Culvert', 'Box Culvert').",NAACC
+naacc_outlet_structure_type,String,NAACC Crossing Attributes,The shape and material of the structure's outlet.,NAACC
+naacc_structure_comment,String,NAACC Crossing Attributes,Specific comments about the physical structure(s) from the surveyor.,NAACC
+nhd_flowline_permanent_identifier,String,NHDPlus Waterway Attributes,The unique identifier for the NHDPlus flowline that the crossing is on.,NHDPlus
+nhd_waterway_type,Integer,NHDPlus Waterway Attributes,"A numeric code representing the general category of the hydrographic feature (e.g., 460 for Stream/River).",NHDPlus
+nhd_waterway_type_description,String,NHDPlus Waterway Attributes,"A human-readable description of the waterway type (e.g., 'StreamRiver', 'CanalDitch').",NHDPlus
+nhd_stream_type_description,String,NHDPlus Waterway Attributes,"A more detailed description of the stream, indicating if it is perennial (flows year-round), intermittent, or ephemeral.",NHDPlus
+nhd_mean_annual_gage_adjusted_flow_cu_ft_per_sec,Real,NHDPlus Waterway Attributes,"The estimated mean annual flow of water in the stream, measured in cubic feet per second. This provides a measure of the waterway's size and power.",NHDPlus
+match_score,Real,Internal Identifiers and Debugging Fields,The raw internal score calculated for the match (lower is better). Used to determine the `match_confidence_score`.,Fused
+osm_road_name_normalized,String,Internal Identifiers and Debugging Fields,The normalized version of the OSM road name used for similarity comparison.,Fused
+naacc_road_name_normalized,String,Internal Identifiers and Debugging Fields,The normalized version of the NAACC road name used for similarity comparison.,Fused
+match_road_name_similarity_score,Real,Internal Identifiers and Debugging Fields,The raw similarity score (0-100) between the OSM and NAACC road names.,Fused
+match_type,String,Match Quality and Provenance,The strategy used for the match: 'road_flowline_intersection_match' (preferred) or 'shortest_line_to_road_span' (fallback).,Fused
+osm_road_class,Integer64,Internal Identifiers and Debugging Fields,"Numeric road classification based on the OpenLR standard, where lower numbers indicate higher-order roads.",OSM
+osm_road_type,String,Internal Identifiers and Debugging Fields,The highway type string corresponding to the primary road class.,OSM
+osm_is_roadway,Boolean,Internal Identifiers and Debugging Fields,"A boolean flag indicating if the OSM way is a standard roadway (not a service road, trail, etc.).",Fused
+osm_is_service_road,Boolean,Internal Identifiers and Debugging Fields,A boolean flag indicating if the OSM way is a service road.,Fused
+naacc_is_trail,Boolean,Internal Identifiers and Debugging Fields,A boolean flag indicating if the NAACC crossing is on a trail.,Fused
+naacc_is_unnamed_road,Boolean,Internal Identifiers and Debugging Fields,A boolean flag indicating if the NAACC road is unnamed.,Fused
+naacc_is_driveway,Boolean,Internal Identifiers and Debugging Fields,A boolean flag indicating if the NAACC crossing is on a driveway.,Fused
+match_has_inconsistent_road_types,Boolean,Internal Identifiers and Debugging Fields,"A boolean flag indicating if there is a significant inconsistency between the OSM and NAACC road types (e.g., a roadway matched to a trail).",Fused
+match_reason,String,Match Quality and Provenance,"A brief text description of the logic used to select the final match (e.g., ""High confidence decision"" or ""Min match rank"").",Fused
+osm_road_u,Integer64,Internal Identifiers and Debugging Fields,Internal identifier for the starting node of the road segment in the OpenStreetMap network graph.,OSM
+osm_road_v,Integer64,Internal Identifiers and Debugging Fields,Internal identifier for the ending node of the road segment in the OpenStreetMap network graph.,OSM
+osm_road_key,Integer64,Internal Identifiers and Debugging Fields,Internal identifier for parallel edges between the same two nodes in the OpenStreetMap network graph.,OSM
+osm_road_span_type,String,Internal Identifiers and Debugging Fields,Indicates if the matched road segment was classified as a 'BRIDGE' or 'NONBRIDGE' span.,Fused
+osm_road_span_idx,Integer64,Internal Identifiers and Debugging Fields,The index of the road span within a larger road segment.,Fused
+osm_road_span_nhd_flowline_intxn_idx,Integer64,Internal Identifiers and Debugging Fields,"The index of the intersection within a road span, for cases where one span has multiple intersections.",Fused

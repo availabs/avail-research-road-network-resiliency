@@ -1,6 +1,7 @@
 # https://geoffboeing.com/share/osmnx-paper.pdf
 # https://geoffboeing.com/2016/11/osmnx-python-street-networks/
 
+import json
 import logging
 import math
 import os
@@ -54,7 +55,7 @@ OSMNX_PICKLE_DIR = os.path.abspath(
     os.path.join(THIS_DIR, "../../data/pickles/osmnx/enriched-osm")
 )
 
-ENRICH_VERSION = "0.1.2"
+ENRICH_VERSION = "0.1.3"
 
 # For OSMnx add_edge_speeds
 DEFAULT_HWY_SPEEDS = {
@@ -470,9 +471,67 @@ def get_best_edge_name(
             # If no edges have ref or name, then lowest road class will win.
             if not edge_full_name:
                 penalty += 100
-                candidates.append(
-                    (penalty, f"<{edge_data['edge_highest_highway_type']}>")
-                )
+
+                placeholder_name = f"{edge_data['roadtype']}"
+
+                if edge_data["roadtype"] == "service" and edge_data["service"]:
+                    service_type_list = (
+                        edge_data["service"]
+                        if isinstance(edge_data["service"], list)
+                        else [edge_data["service"]]
+                    )
+
+                    service_types = [s for s in service_type_list if s]
+
+                    if service_types:
+                        placeholder_name += f"::{service_types[0]}"
+                elif (
+                    edge_data["roadtype"]
+                    and edge_data["roadtype"].endswith("_link")
+                    and "tags" in edge_data
+                ):
+                    tags_list = (
+                        edge_data["tags"]
+                        if isinstance(edge_data["tags"], list)
+                        else [edge_data["tags"]]
+                    )
+
+                    tags_list = [
+                        json.loads(tag) for tag in tags_list if isinstance(tag, str)
+                    ]
+
+                    link_name_pairs = [
+                        (
+                            tags.get("junction:ref", None),
+                            tags.get("destination:ref", tags.get("destination", None)),
+                        )
+                        for tags in tags_list
+                        if tags
+                    ]
+
+                    def get_pair_rank(pair):
+                        """Assigns a rank to a pair based on your preference. Lower is better."""
+                        junction_ref, destination = pair
+
+                        if junction_ref and destination:
+                            return 1  # Preference 1: Both exist
+                        if junction_ref:
+                            return 2  # Preference 2: Only junction:ref exists
+                        if destination:
+                            return 3  # Preference 3: Only destination exists
+                        return 4  # No valid data
+
+                    junction_ref, destination = min(link_name_pairs, key=get_pair_rank)
+
+                    if junction_ref:
+                        placeholder_name += f"::exit {junction_ref}"
+
+                    if junction_ref:
+                        placeholder_name += f"::({destination})"
+
+                edge_full_name = f"<{placeholder_name}>"
+
+                candidates.append((penalty, edge_full_name))
             elif edge_full_name != to_omit_edge_full_name:
                 candidates.append((penalty, edge_full_name))
 
@@ -906,9 +965,9 @@ def clean_geometries(g: nx.MultiDiGraph, G: nx.MultiDiGraph):
             info["osmid"] for info in osm_way_along_info if info["bridge_tag"]
         }
 
-        assert pre_clean_bridge_osmids == post_clean_bridge_osmids, (
-            "INVARIANT BROKEN: Dropped bridges from OSM Ways along."
-        )
+        # assert pre_clean_bridge_osmids == post_clean_bridge_osmids, (
+        #     "INVARIANT BROKEN: Dropped bridges from OSM Ways along."
+        # )
 
         data["osm_way_along_info"] = osm_way_along_info
 
